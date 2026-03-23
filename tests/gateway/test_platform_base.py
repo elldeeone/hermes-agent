@@ -1,14 +1,17 @@
 """Tests for gateway/platforms/base.py — MessageEvent, media extraction, message truncation."""
 
+import asyncio
 import os
 from unittest.mock import patch
 
+from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
     BasePlatformAdapter,
     GATEWAY_SECRET_CAPTURE_UNSUPPORTED_MESSAGE,
     MessageEvent,
     MessageType,
 )
+from gateway.session import SessionSource
 
 
 class TestSecretCaptureGuidance:
@@ -410,3 +413,47 @@ class TestGetHumanDelay:
         with patch.dict(os.environ, env):
             delay = BasePlatformAdapter._get_human_delay()
             assert 0.1 <= delay <= 0.2
+
+
+class TestActiveSessionInterrupts:
+    def _adapter(self):
+        class StubAdapter(BasePlatformAdapter):
+            async def connect(self):
+                return True
+
+            async def disconnect(self):
+                pass
+
+            async def send(self, *a, **kw):
+                pass
+
+            async def get_chat_info(self, *a):
+                return {}
+
+        return StubAdapter(
+            config=PlatformConfig(enabled=True, token="test"),
+            platform=Platform.TELEGRAM,
+        )
+
+    def test_repeated_non_photo_followups_log_interrupt_once(self):
+        adapter = self._adapter()
+        adapter._message_handler = lambda event: None
+
+        source = SessionSource(
+            platform=Platform.TELEGRAM,
+            user_id="u1",
+            chat_id="c1",
+            user_name="tester",
+            chat_type="dm",
+        )
+        session_key = "agent:main:telegram:dm:c1"
+        adapter._active_sessions[session_key] = asyncio.Event()
+
+        first = MessageEvent(text="first", source=source)
+        second = MessageEvent(text="second", source=source)
+
+        with patch("builtins.print") as mock_print:
+            asyncio.run(adapter.handle_message(first))
+            asyncio.run(adapter.handle_message(second))
+
+        assert mock_print.call_count == 1

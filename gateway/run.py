@@ -1290,9 +1290,16 @@ class GatewayRunner:
             # In DMs: offer pairing code. In groups: silently ignore.
             if source.chat_type == "dm" and self._get_unauthorized_dm_behavior(source.platform) == "pair":
                 platform_name = source.platform.value if source.platform else "unknown"
-                code = self.pairing_store.generate_code(
-                    platform_name, source.user_id, source.user_name or ""
+                existing_code = self.pairing_store.get_pending_code(platform_name, source.user_id)
+                code = (
+                    existing_code.strip()
+                    if isinstance(existing_code, str) and existing_code.strip()
+                    else None
                 )
+                if code is None:
+                    code = self.pairing_store.generate_code(
+                        platform_name, source.user_id, source.user_name or ""
+                    )
                 if code:
                     adapter = self.adapters.get(source.platform)
                     if adapter:
