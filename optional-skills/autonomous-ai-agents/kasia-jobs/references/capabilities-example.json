@@ -1,0 +1,20 @@
+[
+  {
+    "name": "copywriting",
+    "description": "Short-form notices, descriptions, and markdown drafts.",
+    "toolset": "safe-worker",
+    "verifierType": "manual_review"
+  },
+  {
+    "name": "frontend-mvp",
+    "description": "Small web UI and component work with build-oriented verification.",
+    "toolset": "safe-worker",
+    "verifierType": "command_passes"
+  },
+  {
+    "name": "structured-transform",
+    "description": "Convert inputs into markdown, JSON, or other structured outputs.",
+    "toolset": "safe-worker",
+    "verifierType": "artifact_present"
+  }
+]
