@@ -59,8 +59,8 @@ python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py handshake-respond <cha
 python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send <chat_id> --message "<text>"
 python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-status <job_id>
 python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py sign-message --message "<text>"
-python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa-preview <address> --amount-kas 1.01
-python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa <address> --amount-kas 1.01
+python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa-preview <address> --amount-kas 1.01 --fee-policy auto
+python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa <address> --amount-kas 1.01 --fee-policy auto
 ```
 
 ## Procedure
@@ -89,11 +89,12 @@ For generic wallet actions tied to Hermes's Kasia identity:
 
 ```bash
 python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py sign-message --message "<text>"
-python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa-preview <address> --amount-kas 1.01
-python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa <address> --amount-kas 1.01
+python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa-preview <address> --amount-kas 1.01 --fee-policy auto
+python3 ~/.hermes/skills/messaging/kasia/scripts/kasia.py send-kaspa <address> --amount-kas 1.01 --fee-policy auto
 ```
 
 Use `send-kaspa-preview` before `send-kaspa` when the user is checking affordability or wants confirmation first.
+Use `--fee-policy low|normal|priority|auto` if the user explicitly wants a different fee-rate policy.
 
 ### Resolve And Inspect A Peer
 

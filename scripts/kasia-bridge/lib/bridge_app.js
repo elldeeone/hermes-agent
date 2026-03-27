@@ -83,7 +83,7 @@ export function createBridgeHandler(core) {
           await core.previewKaspaSend({
             destinationAddress: body.destinationAddress,
             amountSompi: body.amountSompi,
-            priorityFeeSompi: body.priorityFeeSompi,
+            feePolicy: body.feePolicy,
           })
         );
       }
@@ -96,7 +96,7 @@ export function createBridgeHandler(core) {
           await core.sendKaspa({
             destinationAddress: body.destinationAddress,
             amountSompi: body.amountSompi,
-            priorityFeeSompi: body.priorityFeeSompi,
+            feePolicy: body.feePolicy,
           })
         );
       }

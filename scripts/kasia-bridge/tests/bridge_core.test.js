@@ -131,18 +131,19 @@ class FakeWalletClient {
   async previewKaspaSend({
     destinationAddress,
     amountSompi,
-    priorityFeeSompi = 0n,
+    feePolicy = "auto",
   }) {
     this.previewKaspaSends.push({
       destinationAddress,
       amountSompi: String(amountSompi),
-      priorityFeeSompi: String(priorityFeeSompi),
+      feePolicy,
     });
     return {
       canSend: true,
       walletAddress: this.info.address,
       destinationAddress,
       amountSompi: String(amountSompi),
+      feePolicy,
       feeSompi: "1000",
       totalRequiredSompi: String(BigInt(amountSompi) + 1000n),
       inputCount: 1,
@@ -154,18 +155,19 @@ class FakeWalletClient {
   async sendKaspa({
     destinationAddress,
     amountSompi,
-    priorityFeeSompi = 0n,
+    feePolicy = "auto",
   }) {
     this.kaspaSends.push({
       destinationAddress,
       amountSompi: String(amountSompi),
-      priorityFeeSompi: String(priorityFeeSompi),
+      feePolicy,
     });
     return {
       accepted: true,
       walletAddress: this.info.address,
       destinationAddress,
       amountSompi: String(amountSompi),
+      feePolicy,
       txId: "kaspa-send-1",
       transactionCount: 1,
       inputCount: 1,
@@ -362,30 +364,32 @@ test("wallet action helpers delegate to the wallet client", async () => {
   const preview = await bridge.previewKaspaSend({
     destinationAddress: VALID_CONTACT_ADDRESS,
     amountSompi: "101000000",
-    priorityFeeSompi: "0",
+    feePolicy: "priority",
   });
   assert.equal(preview.canSend, true);
+  assert.equal(preview.feePolicy, "priority");
   assert.equal(preview.totalRequiredSompi, "101001000");
   assert.deepEqual(walletClient.previewKaspaSends, [
     {
       destinationAddress: VALID_CONTACT_ADDRESS,
       amountSompi: "101000000",
-      priorityFeeSompi: "0",
+      feePolicy: "priority",
     },
   ]);
 
   const send = await bridge.sendKaspa({
     destinationAddress: VALID_CONTACT_ADDRESS,
     amountSompi: "101000000",
-    priorityFeeSompi: "0",
+    feePolicy: "priority",
   });
   assert.equal(send.accepted, true);
+  assert.equal(send.feePolicy, "priority");
   assert.equal(send.txId, "kaspa-send-1");
   assert.deepEqual(walletClient.kaspaSends, [
     {
       destinationAddress: VALID_CONTACT_ADDRESS,
       amountSompi: "101000000",
-      priorityFeeSompi: "0",
+      feePolicy: "priority",
     },
   ]);
 });

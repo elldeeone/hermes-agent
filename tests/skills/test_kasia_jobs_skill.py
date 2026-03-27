@@ -1021,7 +1021,7 @@ def test_fund_job_from_local_wallet_sends_and_records(monkeypatch, capsys):
             funding_tx_ref=None,
             amount_sompi=None,
             from_local_wallet=True,
-            priority_fee_sompi=None,
+            fee_policy="priority",
         )
     )
     payload = json.loads(capsys.readouterr().out)

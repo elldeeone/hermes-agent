@@ -191,7 +191,7 @@ def test_cmd_send_kaspa_preview_posts_wallet_preview(monkeypatch, capsys):
             destination_address="kaspa:qdest123",
             amount_kas="1.01",
             amount_sompi=None,
-            priority_fee_sompi="0",
+            fee_policy="priority",
         )
     )
     output = json.loads(capsys.readouterr().out)
@@ -203,7 +203,7 @@ def test_cmd_send_kaspa_preview_posts_wallet_preview(monkeypatch, capsys):
         {
             "destinationAddress": "kaspa:qdest123",
             "amountSompi": "101000000",
-            "priorityFeeSompi": "0",
+            "feePolicy": "priority",
         },
     )
     assert output["preview"]["amountKas"] == "1.01"

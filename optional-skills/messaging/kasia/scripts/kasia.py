@@ -345,7 +345,7 @@ def cmd_send_kaspa_preview(args: argparse.Namespace) -> None:
         payload={
             "destinationAddress": _normalize_address(args.destination_address),
             "amountSompi": _resolve_amount_sompi(args),
-            "priorityFeeSompi": str(args.priority_fee_sompi or "0"),
+            "feePolicy": str(args.fee_policy or "auto"),
         },
     )
     _print_json(
@@ -364,7 +364,7 @@ def cmd_send_kaspa(args: argparse.Namespace) -> None:
         payload={
             "destinationAddress": _normalize_address(args.destination_address),
             "amountSompi": _resolve_amount_sompi(args),
-            "priorityFeeSompi": str(args.priority_fee_sompi or "0"),
+            "feePolicy": str(args.fee_policy or "auto"),
         },
     )
     _print_json(
@@ -437,7 +437,11 @@ def build_parser() -> argparse.ArgumentParser:
     amount_group = send_kaspa_preview.add_mutually_exclusive_group(required=True)
     amount_group.add_argument("--amount-kas")
     amount_group.add_argument("--amount-sompi")
-    send_kaspa_preview.add_argument("--priority-fee-sompi")
+    send_kaspa_preview.add_argument(
+        "--fee-policy",
+        choices=["auto", "low", "normal", "priority"],
+        default="auto",
+    )
     send_kaspa_preview.set_defaults(func=cmd_send_kaspa_preview)
 
     send_kaspa = subparsers.add_parser(
@@ -448,7 +452,11 @@ def build_parser() -> argparse.ArgumentParser:
     amount_group = send_kaspa.add_mutually_exclusive_group(required=True)
     amount_group.add_argument("--amount-kas")
     amount_group.add_argument("--amount-sompi")
-    send_kaspa.add_argument("--priority-fee-sompi")
+    send_kaspa.add_argument(
+        "--fee-policy",
+        choices=["auto", "low", "normal", "priority"],
+        default="auto",
+    )
     send_kaspa.set_defaults(func=cmd_send_kaspa)
 
     return parser

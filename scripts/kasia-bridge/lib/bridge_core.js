@@ -356,14 +356,13 @@ export class KasiaBridgeCore {
   async previewKaspaSend({
     destinationAddress,
     amountSompi,
-    priorityFeeSompi = 0n,
+    feePolicy = this.feePolicy,
   }) {
     return await this._withWalletOperation(() =>
       this.walletClient.previewKaspaSend({
         destinationAddress,
         amountSompi,
-        priorityFeeSompi,
-        feePolicy: this.feePolicy,
+        feePolicy,
       })
     );
   }
@@ -371,14 +370,13 @@ export class KasiaBridgeCore {
   async sendKaspa({
     destinationAddress,
     amountSompi,
-    priorityFeeSompi = 0n,
+    feePolicy = this.feePolicy,
   }) {
     return await this._withWalletOperation(() =>
       this.walletClient.sendKaspa({
         destinationAddress,
         amountSompi,
-        priorityFeeSompi,
-        feePolicy: this.feePolicy,
+        feePolicy,
       })
     );
   }

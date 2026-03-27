@@ -208,7 +208,7 @@ test("bridge handler forwards wallet action requests", async () => {
       body: JSON.stringify({
         destinationAddress: "kaspa:qpeer",
         amountSompi: "101000000",
-        priorityFeeSompi: "0",
+        feePolicy: "priority",
       }),
     });
     assert.equal(previewResponse.status, 200);
@@ -217,7 +217,7 @@ test("bridge handler forwards wallet action requests", async () => {
       feeSompi: "1000",
       destinationAddress: "kaspa:qpeer",
       amountSompi: "101000000",
-      priorityFeeSompi: "0",
+      feePolicy: "priority",
     });
 
     const sendResponse = await fetch(`${baseUrl}/wallet/send-kaspa`, {
@@ -226,7 +226,7 @@ test("bridge handler forwards wallet action requests", async () => {
       body: JSON.stringify({
         destinationAddress: "kaspa:qpeer",
         amountSompi: "101000000",
-        priorityFeeSompi: "0",
+        feePolicy: "priority",
       }),
     });
     assert.equal(sendResponse.status, 200);
@@ -235,28 +235,28 @@ test("bridge handler forwards wallet action requests", async () => {
       txId: "kaspa-send-1",
       destinationAddress: "kaspa:qpeer",
       amountSompi: "101000000",
-      priorityFeeSompi: "0",
+      feePolicy: "priority",
     });
   });
 
   assert.deepEqual(calls, [
     ["sign", { message: "sign me" }],
     [
-      "preview",
-      {
-        destinationAddress: "kaspa:qpeer",
-        amountSompi: "101000000",
-        priorityFeeSompi: "0",
-      },
-    ],
+        "preview",
+        {
+          destinationAddress: "kaspa:qpeer",
+          amountSompi: "101000000",
+          feePolicy: "priority",
+        },
+      ],
     [
-      "send-kaspa",
-      {
-        destinationAddress: "kaspa:qpeer",
-        amountSompi: "101000000",
-        priorityFeeSompi: "0",
-      },
-    ],
+        "send-kaspa",
+        {
+          destinationAddress: "kaspa:qpeer",
+          amountSompi: "101000000",
+          feePolicy: "priority",
+        },
+      ],
   ]);
 });
 

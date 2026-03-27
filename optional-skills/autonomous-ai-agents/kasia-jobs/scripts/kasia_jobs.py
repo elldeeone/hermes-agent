@@ -480,7 +480,7 @@ def _preview_send_with_kasia_bridge(
     *,
     destination_address: str,
     amount_sompi: str | int,
-    priority_fee_sompi: str | int = "0",
+    fee_policy: str = "auto",
 ) -> dict[str, Any]:
     bridge_base = _resolve_kasia_bridge_base()
     payload = _request_json(
@@ -490,7 +490,7 @@ def _preview_send_with_kasia_bridge(
         payload={
             "destinationAddress": _normalize_address(destination_address),
             "amountSompi": str(amount_sompi),
-            "priorityFeeSompi": str(priority_fee_sompi),
+            "feePolicy": str(fee_policy or "auto"),
         },
     )
     payload["bridgeBase"] = bridge_base
@@ -501,7 +501,7 @@ def _send_with_kasia_bridge(
     *,
     destination_address: str,
     amount_sompi: str | int,
-    priority_fee_sompi: str | int = "0",
+    fee_policy: str = "auto",
 ) -> dict[str, Any]:
     bridge_base = _resolve_kasia_bridge_base()
     payload = _request_json(
@@ -511,7 +511,7 @@ def _send_with_kasia_bridge(
         payload={
             "destinationAddress": _normalize_address(destination_address),
             "amountSompi": str(amount_sompi),
-            "priorityFeeSompi": str(priority_fee_sompi),
+            "feePolicy": str(fee_policy or "auto"),
         },
     )
     payload["bridgeBase"] = bridge_base
@@ -550,7 +550,7 @@ def _local_wallet_funding_option(escrow: dict[str, Any]) -> dict[str, Any]:
         payload={
             "destinationAddress": _normalize_address(deposit_address),
             "amountSompi": amount_sompi,
-            "priorityFeeSompi": "0",
+            "feePolicy": "auto",
         },
     )
     if not preview_result["ok"]:
@@ -2576,7 +2576,7 @@ def cmd_fund_job(args: argparse.Namespace) -> None:
         preview = _preview_send_with_kasia_bridge(
             destination_address=deposit_address,
             amount_sompi=amount_sompi,
-            priority_fee_sompi=args.priority_fee_sompi or "0",
+            fee_policy=args.fee_policy or "auto",
         )
         if not preview.get("canSend"):
             raise SystemExit(
@@ -2597,7 +2597,7 @@ def cmd_fund_job(args: argparse.Namespace) -> None:
         send_result = _send_with_kasia_bridge(
             destination_address=deposit_address,
             amount_sompi=amount_sompi,
-            priority_fee_sompi=args.priority_fee_sompi or "0",
+            fee_policy=args.fee_policy or "auto",
         )
         funding_tx_ref = str(
             send_result.get("txId")
@@ -3056,8 +3056,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Send the escrow funding amount from Hermes's own local Kasia wallet, then record the tx on the board",
     )
     fund.add_argument(
-        "--priority-fee-sompi",
-        help="Optional extra priority fee to include when funding from the local Kasia wallet",
+        "--fee-policy",
+        choices=["auto", "low", "normal", "priority"],
+        default="auto",
+        help="Fee-rate policy to use when funding from Hermes's local Kasia wallet",
     )
     fund.set_defaults(func=cmd_fund_job)
 
