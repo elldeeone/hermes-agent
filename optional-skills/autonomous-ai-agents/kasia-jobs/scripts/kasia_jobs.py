@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
@@ -186,6 +187,20 @@ def _request_json_result(
 
 def _print_json(value: Any) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def _build_query_path(path: str, params: list[tuple[str, Any]]) -> str:
+    query_items: list[tuple[str, str]] = []
+    for key, value in params:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        query_items.append((key, text))
+    if not query_items:
+        return path
+    return f"{path}?{urllib.parse.urlencode(query_items, doseq=True)}"
 
 
 def _iso_to_datetime(value: str | None) -> datetime | None:
@@ -859,10 +874,10 @@ def _filtered_recommendations(
     statuses: list[str] | None = None,
     new_since_hours: float | None = None,
 ) -> dict[str, Any]:
-    query = [f"limit={max(1, limit)}"]
+    query: list[tuple[str, Any]] = [("limit", max(1, limit))]
     for status in statuses or ["open"]:
-        query.append(f"status={status}")
-    path = f"/jobs/recommendations/me?{'&'.join(query)}"
+        query.append(("status", status))
+    path = _build_query_path("/jobs/recommendations/me", query)
     payload = _request_json(
         "GET",
         path,
@@ -1098,6 +1113,27 @@ def _claim_brief(claim: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _submission_brief(submission: dict[str, Any]) -> dict[str, Any]:
+    artifacts = submission.get("artifacts") or []
+    return {
+        "id": submission.get("id"),
+        "claimId": submission.get("claimId"),
+        "status": submission.get("status"),
+        "summary": submission.get("summary"),
+        "resultHash": submission.get("resultHash"),
+        "resultExternalRef": submission.get("resultExternalRef"),
+        "artifactCount": len(artifacts),
+        "artifactKinds": [
+            str((artifact or {}).get("kind") or "").strip()
+            for artifact in artifacts
+            if str((artifact or {}).get("kind") or "").strip()
+        ],
+        "revisionNotes": submission.get("revisionNotes"),
+        "createdAt": submission.get("createdAt"),
+        "updatedAt": submission.get("updatedAt"),
+    }
+
+
 def _job_brief(job: dict[str, Any]) -> dict[str, Any]:
     escrow = job.get("escrow") or {}
     pending_claims = [
@@ -1158,6 +1194,10 @@ def _poster_job_bucket(brief: dict[str, Any]) -> str:
 
     if escrow_status == "refunded" or status in {"rejected", "cancelled"}:
         return "refunded"
+    if escrow_status == "released":
+        return "completed"
+    if status in {"completed", "approved", "released", "paid"} and escrow_status == "reserved":
+        return "needsRelease"
     if status in {"completed", "approved", "released", "paid"}:
         return "completed"
     if status in {"submitted", "awaiting_review"}:
@@ -1179,9 +1219,6 @@ def _poster_job_bucket(brief: dict[str, Any]) -> str:
 
 def _enrich_poster_job(*, job: dict[str, Any], base_url: str, token: str) -> dict[str, Any]:
     if job.get("escrow"):
-        return job
-    status = str(job.get("status") or "").strip().lower()
-    if status not in {"open", "claimed", "submitted"}:
         return job
     escrow_payload = _maybe_request_json(
         "GET",
@@ -1206,6 +1243,7 @@ def _poster_dashboard_payload(*, base_url: str, token: str) -> dict[str, Any]:
         "readyForClaims": [],
         "inProgress": [],
         "awaitingReview": [],
+        "needsRelease": [],
         "completed": [],
         "refunded": [],
     }
@@ -1269,6 +1307,13 @@ def _poster_dashboard_payload(*, base_url: str, token: str) -> dict[str, Any]:
             )
             continue
 
+        if bucket == "needsRelease":
+            buckets["needsRelease"].append(brief)
+            next_actions.append(
+                f"Release reserved escrow for completed job {brief['id']} ({brief['title']}) so the worker gets paid."
+            )
+            continue
+
         if bucket == "refunded":
             buckets["refunded"].append(brief)
             continue
@@ -1284,6 +1329,7 @@ def _poster_dashboard_payload(*, base_url: str, token: str) -> dict[str, Any]:
             "readyForClaims": len(buckets["readyForClaims"]),
             "inProgress": len(buckets["inProgress"]),
             "awaitingReview": len(buckets["awaitingReview"]),
+            "needsRelease": len(buckets["needsRelease"]),
             "completed": len(buckets["completed"]),
             "refunded": len(buckets["refunded"]),
         },
@@ -1348,7 +1394,9 @@ def _dashboard_payload(*, base_url: str, token: str) -> dict[str, Any]:
     elif has_worker:
         suggested_mode = "worker"
 
-    if worker["summary"]["assignedInProgress"] > 0 or worker["summary"]["awaitingReview"] > 0:
+    if poster["summary"]["needsRelease"] > 0:
+        suggested_focus = "poster"
+    elif worker["summary"]["assignedInProgress"] > 0 or worker["summary"]["awaitingReview"] > 0:
         suggested_focus = "worker"
     elif poster["summary"]["needsClaimDecision"] > 0 or poster["summary"]["awaitingReview"] > 0:
         suggested_focus = "poster"
@@ -1381,8 +1429,12 @@ def _dashboard_payload(*, base_url: str, token: str) -> dict[str, Any]:
     combined_next_actions = []
     if role_warning:
         combined_next_actions.append(role_warning)
-    combined_next_actions.extend(worker["nextActions"])
-    combined_next_actions.extend(poster["nextActions"])
+    if suggested_focus == "poster":
+        combined_next_actions.extend(poster["nextActions"])
+        combined_next_actions.extend(worker["nextActions"])
+    else:
+        combined_next_actions.extend(worker["nextActions"])
+        combined_next_actions.extend(poster["nextActions"])
 
     return {
         "identity": {
@@ -1702,7 +1754,9 @@ def _claim_intent_payload(
 def _review_intent_payload(*, base_url: str, token: str) -> dict[str, Any]:
     poster = _poster_dashboard_payload(base_url=base_url, token=token)
     summary = poster["summary"]
-    if summary["awaitingReview"] > 0:
+    if summary["needsRelease"] > 0:
+        next_step = "Release reserved escrow for the next completed job so the worker gets paid."
+    elif summary["awaitingReview"] > 0:
         next_step = "Inspect the latest submitted job, then approve it or request a revision."
     elif summary["needsClaimDecision"] > 0:
         next_step = "Pick the best pending claimant before looking for new work."
@@ -1718,6 +1772,7 @@ def _review_intent_payload(*, base_url: str, token: str) -> dict[str, Any]:
         "ready": True,
         "posterDashboard": poster,
         "humanSummary": (
+            f"{summary['needsRelease']} needing release, "
             f"{summary['awaitingReview']} awaiting review, "
             f"{summary['needsClaimDecision']} waiting on claim decisions, "
             f"{summary['awaitingFunding']} awaiting funding."
@@ -1741,6 +1796,87 @@ def _auth_required_intent_payload(*, intent: str, role: str, error: str) -> dict
     }
 
 
+def cmd_agent_me(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            "/agents/me",
+            base_url=args.base_url,
+            token=_require_token(),
+        )
+    )
+
+
+def cmd_jobs(args: argparse.Namespace) -> None:
+    query: list[tuple[str, Any]] = []
+    if args.limit and args.limit > 0:
+        query.append(("limit", args.limit))
+    for status in args.status or []:
+        query.append(("status", status))
+    data = _request_json(
+        "GET",
+        _build_query_path("/jobs", query),
+        base_url=args.base_url,
+    )
+    jobs = data.get("jobs") or []
+    _print_json(
+        {
+            "filters": {
+                "limit": args.limit,
+                "statuses": args.status or [],
+            },
+            "summary": {
+                "count": len(jobs),
+            },
+            "jobs": [_job_brief(job) for job in jobs],
+        }
+    )
+
+
+def cmd_browse(args: argparse.Namespace) -> None:
+    _print_json(
+        _filtered_recommendations(
+            base_url=args.base_url,
+            token=_require_token(),
+            limit=args.limit,
+            statuses=args.status or ["open"],
+            new_since_hours=args.new_since_hours,
+        )
+    )
+
+
+def cmd_job(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            f"/jobs/{args.job_id}",
+            base_url=args.base_url,
+        )
+    )
+
+
+def cmd_my_poster(args: argparse.Namespace) -> None:
+    token = _require_token()
+    jobs = (
+        _request_json(
+            "GET",
+            "/jobs/me/poster",
+            base_url=args.base_url,
+            token=token,
+        ).get("jobs")
+        or []
+    )
+    _print_json(
+        {
+            "summary": {"count": len(jobs)},
+            "jobs": [
+                _job_brief(_enrich_poster_job(job=job, base_url=args.base_url, token=token))
+                for job in jobs
+            ],
+        }
+    )
+
+
 def cmd_funding_instructions(args: argparse.Namespace) -> None:
     _print_json({"funding": _funding_payload(base_url=args.base_url, job_id=args.job_id)})
 
@@ -1753,6 +1889,25 @@ def cmd_my_worker(args: argparse.Namespace) -> None:
         token=_require_token(),
     )
     _print_json(data)
+
+
+def cmd_claims(args: argparse.Namespace) -> None:
+    data = _request_json(
+        "GET",
+        f"/jobs/{args.job_id}/claims",
+        base_url=args.base_url,
+    )
+    claims = data.get("claims") or []
+    _print_json(
+        {
+            "summary": {
+                "count": len(claims),
+                "pending": len([claim for claim in claims if claim.get("status") == "pending"]),
+                "accepted": len([claim for claim in claims if claim.get("status") == "accepted"]),
+            },
+            "claims": [_claim_brief(claim) for claim in claims],
+        }
+    )
 
 
 def cmd_poster_dashboard(args: argparse.Namespace) -> None:
@@ -1773,6 +1928,39 @@ def cmd_worker_dashboard(args: argparse.Namespace) -> None:
                 base_url=args.base_url,
                 token=_require_token(),
             )
+        }
+    )
+
+
+def cmd_submissions(args: argparse.Namespace) -> None:
+    data = _request_json(
+        "GET",
+        f"/jobs/{args.job_id}/submissions",
+        base_url=args.base_url,
+    )
+    submissions = data.get("submissions") or []
+    _print_json(
+        {
+            "summary": {
+                "count": len(submissions),
+                "submitted": len(
+                    [submission for submission in submissions if submission.get("status") == "submitted"]
+                ),
+                "needsRevision": len(
+                    [
+                        submission
+                        for submission in submissions
+                        if submission.get("status") == "needs_revision"
+                    ]
+                ),
+                "approved": len(
+                    [submission for submission in submissions if submission.get("status") == "approved"]
+                ),
+                "rejected": len(
+                    [submission for submission in submissions if submission.get("status") == "rejected"]
+                ),
+            },
+            "submissions": [_submission_brief(submission) for submission in submissions],
         }
     )
 
@@ -1888,13 +2076,63 @@ def cmd_intent(args: argparse.Namespace) -> None:
     raise SystemExit(f"Unsupported intent: {args.intent}")
 
 
-def cmd_job_messages(args: argparse.Namespace) -> None:
+def cmd_messages(args: argparse.Namespace) -> None:
     data = _request_json(
         "GET",
         f"/jobs/{args.job_id}/messages",
         base_url=args.base_url,
     )
     _print_json(data)
+
+
+def cmd_transport_events(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            f"/jobs/{args.job_id}/transport-events",
+            base_url=args.base_url,
+        )
+    )
+
+
+def cmd_escrow(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            f"/jobs/{args.job_id}/escrow",
+            base_url=args.base_url,
+        )
+    )
+
+
+def cmd_coordinator_notices(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            f"/jobs/{args.job_id}/coordinator-notices",
+            base_url=args.base_url,
+        )
+    )
+
+
+def cmd_escrow_actions(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            f"/jobs/{args.job_id}/escrow-actions",
+            base_url=args.base_url,
+        )
+    )
+
+
+def cmd_coordinator_diagnostics(args: argparse.Namespace) -> None:
+    _print_json(
+        _request_json(
+            "GET",
+            "/coordinator/diagnostics",
+            base_url=args.base_url,
+        )
+    )
 
 
 def _thread_message_summary(prefix: str, text: str, fallback: str) -> str:
@@ -2078,6 +2316,17 @@ def _claim_job(
     return result
 
 
+def cmd_claim_job(args: argparse.Namespace) -> None:
+    _print_json(
+        _claim_job(
+            base_url=args.base_url,
+            job_id=args.job_id,
+            message=args.message,
+            estimated_hours=args.estimated_hours,
+        )
+    )
+
+
 def cmd_claim_best(args: argparse.Namespace) -> None:
     recommendations = _filtered_recommendations(
         base_url=args.base_url,
@@ -2211,6 +2460,20 @@ def cmd_verdict(args: argparse.Namespace) -> None:
     data = _request_json(
         "POST",
         f"/jobs/{args.job_id}/verdicts",
+        base_url=args.base_url,
+        token=_require_token(),
+        payload=payload,
+    )
+    _print_json(data)
+
+
+def cmd_verify_submission(args: argparse.Namespace) -> None:
+    payload = {
+        "submissionId": args.submission_id,
+    }
+    data = _request_json(
+        "POST",
+        f"/jobs/{args.job_id}/verify",
         base_url=args.base_url,
         token=_require_token(),
         payload=payload,
@@ -2370,6 +2633,24 @@ def cmd_refund_job(args: argparse.Namespace) -> None:
     _print_json(data)
 
 
+def cmd_release_job(args: argparse.Namespace) -> None:
+    payload = {}
+    if args.release_tx_ref:
+        payload["releaseTxRef"] = args.release_tx_ref
+    if args.amount_sompi:
+        payload["amountSompi"] = args.amount_sompi
+    if args.to_address:
+        payload["toAddress"] = _normalize_address(args.to_address)
+    data = _request_json(
+        "POST",
+        f"/jobs/{args.job_id}/release",
+        base_url=args.base_url,
+        token=_require_token(),
+        payload=payload,
+    )
+    _print_json(data)
+
+
 def _require_token() -> str:
     token = _bearer_token()
     if not token:
@@ -2427,13 +2708,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     heartbeat.set_defaults(func=cmd_heartbeat)
 
-    thread = subparsers.add_parser(
-        "job-messages",
-        help="Show the board-side message ledger for one job thread",
+    agent_me = subparsers.add_parser("agent-me", help="Show the authenticated board session and agent record")
+    _add_base_url_option(agent_me)
+    agent_me.set_defaults(func=cmd_agent_me)
+
+    jobs = subparsers.add_parser("jobs", help="List public jobs from the board")
+    _add_base_url_option(jobs)
+    jobs.add_argument("--limit", type=int, default=20)
+    jobs.add_argument("--status", action="append", default=[])
+    jobs.set_defaults(func=cmd_jobs)
+
+    browse = subparsers.add_parser(
+        "browse",
+        help="List recommended jobs for the authenticated worker",
     )
-    _add_base_url_option(thread)
-    thread.add_argument("job_id")
-    thread.set_defaults(func=cmd_job_messages)
+    _add_base_url_option(browse)
+    browse.add_argument("--limit", type=int, default=5)
+    browse.add_argument("--status", action="append", default=None)
+    browse.add_argument("--new-since-hours", type=float)
+    browse.set_defaults(func=cmd_browse)
+
+    job = subparsers.add_parser("job", help="Show the full board record for one job")
+    _add_base_url_option(job)
+    job.add_argument("job_id")
+    job.set_defaults(func=cmd_job)
 
     clarify = subparsers.add_parser(
         "clarify",
@@ -2463,9 +2761,18 @@ def build_parser() -> argparse.ArgumentParser:
     funding.add_argument("job_id")
     funding.set_defaults(func=cmd_funding_instructions)
 
+    my_poster = subparsers.add_parser("my-poster", help="List posted jobs for the authenticated poster")
+    _add_base_url_option(my_poster)
+    my_poster.set_defaults(func=cmd_my_poster)
+
     my_worker = subparsers.add_parser("my-worker", help="List claims and assigned jobs for the current worker")
     _add_base_url_option(my_worker)
     my_worker.set_defaults(func=cmd_my_worker)
+
+    claims = subparsers.add_parser("claims", help="List claims for one job")
+    _add_base_url_option(claims)
+    claims.add_argument("job_id")
+    claims.set_defaults(func=cmd_claims)
 
     poster_dashboard = subparsers.add_parser(
         "poster-dashboard",
@@ -2480,6 +2787,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_base_url_option(worker_dashboard)
     worker_dashboard.set_defaults(func=cmd_worker_dashboard)
+
+    submissions = subparsers.add_parser("submissions", help="List submissions for one job")
+    _add_base_url_option(submissions)
+    submissions.add_argument("job_id")
+    submissions.set_defaults(func=cmd_submissions)
 
     dashboard = subparsers.add_parser(
         "dashboard",
@@ -2507,11 +2819,55 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["manual_review", "artifact_present", "command_passes"],
     )
     intent.add_argument("--limit", type=int, default=5)
-    intent.add_argument("--status", action="append", default=["open"])
+    intent.add_argument("--status", action="append", default=None)
     intent.add_argument("--new-since-hours", type=float)
     intent.add_argument("--allow-awaiting-funds", action="store_true")
     intent.add_argument("--min-score", type=int, default=1)
     intent.set_defaults(func=cmd_intent)
+
+    messages = subparsers.add_parser(
+        "messages",
+        help="Show the board-side thread ledger for one job",
+    )
+    _add_base_url_option(messages)
+    messages.add_argument("job_id")
+    messages.set_defaults(func=cmd_messages)
+
+    transport_events = subparsers.add_parser(
+        "transport-events",
+        help="Show transport events recorded for one job",
+    )
+    _add_base_url_option(transport_events)
+    transport_events.add_argument("job_id")
+    transport_events.set_defaults(func=cmd_transport_events)
+
+    escrow = subparsers.add_parser("escrow", help="Show escrow state for one job")
+    _add_base_url_option(escrow)
+    escrow.add_argument("job_id")
+    escrow.set_defaults(func=cmd_escrow)
+
+    coordinator_notices = subparsers.add_parser(
+        "coordinator-notices",
+        help="Show coordinator notices queued for one job",
+    )
+    _add_base_url_option(coordinator_notices)
+    coordinator_notices.add_argument("job_id")
+    coordinator_notices.set_defaults(func=cmd_coordinator_notices)
+
+    escrow_actions = subparsers.add_parser(
+        "escrow-actions",
+        help="Show escrow action history for one job",
+    )
+    _add_base_url_option(escrow_actions)
+    escrow_actions.add_argument("job_id")
+    escrow_actions.set_defaults(func=cmd_escrow_actions)
+
+    coordinator_diagnostics = subparsers.add_parser(
+        "coordinator-diagnostics",
+        help="Show board coordinator notice and settlement diagnostics",
+    )
+    _add_base_url_option(coordinator_diagnostics)
+    coordinator_diagnostics.set_defaults(func=cmd_coordinator_diagnostics)
 
     create_job = subparsers.add_parser("create-job", help="Create a new prompt job as the authenticated poster")
     _add_base_url_option(create_job)
@@ -2536,13 +2892,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_base_url_option(claim_best)
     claim_best.add_argument("--limit", type=int, default=5)
-    claim_best.add_argument("--status", action="append", default=["open"])
+    claim_best.add_argument("--status", action="append", default=None)
     claim_best.add_argument("--new-since-hours", type=float)
     claim_best.add_argument("--min-score", type=int, default=1)
     claim_best.add_argument("--allow-awaiting-funds", action="store_true")
     claim_best.add_argument("--message")
     claim_best.add_argument("--estimated-hours", type=int)
     claim_best.set_defaults(func=cmd_claim_best)
+
+    claim_job = subparsers.add_parser("claim-job", help="Claim a specific job id as the authenticated worker")
+    _add_base_url_option(claim_job)
+    claim_job.add_argument("job_id")
+    claim_job.add_argument("--message")
+    claim_job.add_argument("--estimated-hours", type=int)
+    claim_job.set_defaults(func=cmd_claim_job)
 
     accept = subparsers.add_parser("accept-claim", help="Accept a claim as the job poster")
     _add_base_url_option(accept)
@@ -2574,6 +2937,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verdict.set_defaults(func=cmd_verdict)
 
+    verify = subparsers.add_parser(
+        "verify-submission",
+        help="Run board-side auto verification for one submission",
+    )
+    _add_base_url_option(verify)
+    verify.add_argument("job_id")
+    verify.add_argument("--submission-id", required=True)
+    verify.set_defaults(func=cmd_verify_submission)
+
     revision = subparsers.add_parser(
         "request-revision",
         help="Reopen a submitted job for the worker to revise and resubmit",
@@ -2604,6 +2976,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional extra priority fee to include when funding from the local Kasia wallet",
     )
     fund.set_defaults(func=cmd_fund_job)
+
+    release = subparsers.add_parser("release-job", help="Release reserved escrow to the assigned worker")
+    _add_base_url_option(release)
+    release.add_argument("job_id")
+    release.add_argument("--release-tx-ref")
+    release.add_argument("--amount-sompi")
+    release.add_argument("--to-address")
+    release.set_defaults(func=cmd_release_job)
 
     refund = subparsers.add_parser("refund-job", help="Refund funded or reserved escrow to the poster")
     _add_base_url_option(refund)

@@ -26,6 +26,35 @@ def load_module():
     return module
 
 
+def test_parser_exposes_greenfield_board_control_surface():
+    mod = load_module()
+    parser = mod.build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+
+    commands = set(subparsers.choices)
+
+    assert "agent-me" in commands
+    assert "jobs" in commands
+    assert "browse" in commands
+    assert "job" in commands
+    assert "my-poster" in commands
+    assert "claim-job" in commands
+    assert "submissions" in commands
+    assert "messages" in commands
+    assert "transport-events" in commands
+    assert "escrow" in commands
+    assert "coordinator-notices" in commands
+    assert "escrow-actions" in commands
+    assert "coordinator-diagnostics" in commands
+    assert "verify-submission" in commands
+    assert "release-job" in commands
+    assert "job-messages" not in commands
+
+
 def test_poster_dashboard_prefers_job_status_over_missing_escrow(monkeypatch):
     mod = load_module()
     jobs = [
@@ -86,6 +115,16 @@ def test_poster_dashboard_prefers_job_status_over_missing_escrow(monkeypatch):
             ],
             "escrow": {"status": "funded"},
         },
+        {
+            "id": "job-needs-release",
+            "title": "Ready to pay worker",
+            "status": "completed",
+            "budgetKas": "2",
+            "createdAt": "2026-03-26T00:00:00Z",
+            "updatedAt": "2026-03-26T00:00:00Z",
+            "escrow": {"status": "reserved"},
+            "awardedWorker": {"address": "kaspa:qptestreleaseworker1"},
+        },
     ]
 
     def fake_request_json(method, path, *, base_url, payload=None, token=None):
@@ -117,6 +156,7 @@ def test_poster_dashboard_prefers_job_status_over_missing_escrow(monkeypatch):
     assert payload["summary"]["awaitingFunding"] == 1
     assert payload["summary"]["needsFundingSetup"] == 1
     assert payload["summary"]["needsClaimDecision"] == 1
+    assert payload["summary"]["needsRelease"] == 1
     assert payload["suggestedClaimDecisions"] == [
         {
             "jobId": "job-pending-claims",
@@ -154,6 +194,7 @@ def test_dashboard_reports_board_identity_mismatch(monkeypatch):
                 "readyForClaims": 0,
                 "inProgress": 0,
                 "awaitingReview": 0,
+                "needsRelease": 0,
                 "completed": 0,
                 "refunded": 0,
             },
@@ -367,6 +408,34 @@ def test_intent_check_reports_auth_setup_requirement(monkeypatch, capsys):
     assert payload["nextStep"] == "Run auth first, then retry this intent."
 
 
+def test_review_intent_prioritizes_needs_release(monkeypatch):
+    mod = load_module()
+
+    monkeypatch.setattr(
+        mod,
+        "_poster_dashboard_payload",
+        lambda **_: {
+            "summary": {
+                "totalJobs": 2,
+                "awaitingFunding": 0,
+                "needsFundingSetup": 0,
+                "needsClaimDecision": 0,
+                "readyForClaims": 0,
+                "inProgress": 0,
+                "awaitingReview": 1,
+                "needsRelease": 1,
+                "completed": 0,
+                "refunded": 0,
+            }
+        },
+    )
+
+    payload = mod._review_intent_payload(base_url="http://board", token="token")
+
+    assert payload["nextStep"] == "Release reserved escrow for the next completed job so the worker gets paid."
+    assert payload["humanSummary"].startswith("1 needing release, 1 awaiting review")
+
+
 def test_intent_claim_returns_claim_preview(monkeypatch, capsys):
     mod = load_module()
 
@@ -417,6 +486,55 @@ def test_intent_claim_returns_claim_preview(monkeypatch, capsys):
     assert payload["selectedRecommendation"]["job"]["id"] == "job-1"
     assert payload["claimPreview"]["command"] == "claim-best"
     assert payload["claimPreview"]["minScore"] == 50
+
+
+def test_claim_job_claims_specific_job(monkeypatch, capsys):
+    mod = load_module()
+
+    def fake_request_json(method, path, *, base_url, token=None, payload=None):
+        if method == "POST" and path == "/jobs/job-42/claims":
+            assert token == "token"
+            assert payload == {
+                "message": "Good fit for this one",
+                "estimatedHours": 2,
+            }
+            return {
+                "claim": {
+                    "id": "claim-42",
+                    "status": "pending",
+                    "message": payload["message"],
+                    "estimatedHours": payload["estimatedHours"],
+                },
+                "created": True,
+            }
+        if method == "GET" and path == "/jobs/job-42":
+            return {
+                "job": {
+                    "id": "job-42",
+                    "title": "Specific lobster page",
+                    "execution": {"platform": "kasia"},
+                }
+            }
+        raise AssertionError((method, path, payload))
+
+    monkeypatch.setattr(mod, "_require_token", lambda: "token")
+    monkeypatch.setattr(mod, "_request_json", fake_request_json)
+    monkeypatch.setattr(mod, "_maybe_bootstrap_coordinator_handshake", lambda **_: None)
+    monkeypatch.setattr(mod, "_maybe_send_kasia_notice", lambda **_: None)
+
+    mod.cmd_claim_job(
+        argparse.Namespace(
+            base_url="http://board",
+            job_id="job-42",
+            message="Good fit for this one",
+            estimated_hours=2,
+        )
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["claim"]["id"] == "claim-42"
+    assert payload["created"] is True
+    assert payload["jobExecution"]["platform"] == "kasia"
 
 
 def test_recommendations_include_human_summary_and_next_step(monkeypatch):
@@ -848,3 +966,40 @@ def test_fund_job_from_local_wallet_sends_and_records(monkeypatch, capsys):
     assert payload["boardRecorded"] is True
     assert payload["escrow"]["status"] == "funded"
     assert payload["humanExplanation"].startswith("I funded this job from my wallet.")
+
+
+def test_release_job_posts_release_request(monkeypatch, capsys):
+    mod = load_module()
+
+    def fake_request_json(method, path, *, base_url, payload=None, token=None):
+        assert method == "POST"
+        assert path == "/jobs/job-release/release"
+        assert token == "token"
+        assert payload == {
+            "releaseTxRef": "release_tx_123",
+            "amountSompi": "101000000",
+            "toAddress": "kaspa:qworker123",
+        }
+        return {
+            "escrow": {
+                "status": "released",
+                "releaseTxRef": "release_tx_123",
+            }
+        }
+
+    monkeypatch.setattr(mod, "_require_token", lambda: "token")
+    monkeypatch.setattr(mod, "_request_json", fake_request_json)
+
+    mod.cmd_release_job(
+        argparse.Namespace(
+            base_url="http://board",
+            job_id="job-release",
+            release_tx_ref="release_tx_123",
+            amount_sompi="101000000",
+            to_address="qworker123",
+        )
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["escrow"]["status"] == "released"
+    assert payload["escrow"]["releaseTxRef"] == "release_tx_123"
