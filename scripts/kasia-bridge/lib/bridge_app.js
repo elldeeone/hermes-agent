@@ -70,6 +70,37 @@ export function createBridgeHandler(core) {
         return sendJson(res, 200, await core.inspectWallet({ txId }));
       }
 
+      if (method === "POST" && url.pathname === "/wallet/sign-message") {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, await core.signWalletMessage({ message: body.message }));
+      }
+
+      if (method === "POST" && url.pathname === "/wallet/send-kaspa/preview") {
+        const body = await readJsonBody(req);
+        return sendJson(
+          res,
+          200,
+          await core.previewKaspaSend({
+            destinationAddress: body.destinationAddress,
+            amountSompi: body.amountSompi,
+            priorityFeeSompi: body.priorityFeeSompi,
+          })
+        );
+      }
+
+      if (method === "POST" && url.pathname === "/wallet/send-kaspa") {
+        const body = await readJsonBody(req);
+        return sendJson(
+          res,
+          200,
+          await core.sendKaspa({
+            destinationAddress: body.destinationAddress,
+            amountSompi: body.amountSompi,
+            priorityFeeSompi: body.priorityFeeSompi,
+          })
+        );
+      }
+
       if (method === "GET" && url.pathname === "/messages") {
         return sendJson(res, 200, core.dequeueMessages());
       }

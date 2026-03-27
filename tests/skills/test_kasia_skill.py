@@ -48,6 +48,9 @@ def test_parser_exposes_kasia_operator_surface():
     assert "handshake-respond" in commands
     assert "send" in commands
     assert "send-status" in commands
+    assert "sign-message" in commands
+    assert "send-kaspa-preview" in commands
+    assert "send-kaspa" in commands
 
 
 def test_wallet_payload_formats_balances():
@@ -158,3 +161,82 @@ def test_cmd_tx_check_returns_tx_query(monkeypatch, capsys):
 
     assert output["txQuery"]["txId"] == "tx-topup"
     assert output["txQuery"]["found"] is True
+
+
+def test_kas_to_sompi_string_handles_decimal_kas():
+    mod = load_module()
+
+    assert mod._kas_to_sompi_string("1.01") == "101000000"
+
+
+def test_cmd_send_kaspa_preview_posts_wallet_preview(monkeypatch, capsys):
+    mod = load_module()
+    seen = {}
+
+    def fake_request_json(method, path, *, base_url, payload=None):
+        seen["call"] = (method, path, base_url, payload)
+        return {
+            "canSend": True,
+            "destinationAddress": payload["destinationAddress"],
+            "amountSompi": payload["amountSompi"],
+            "feeSompi": "120000",
+            "totalRequiredSompi": "101120000",
+        }
+
+    monkeypatch.setattr(mod, "_request_json", fake_request_json)
+
+    mod.cmd_send_kaspa_preview(
+        argparse.Namespace(
+            bridge_base="http://127.0.0.1:3010",
+            destination_address="kaspa:qdest123",
+            amount_kas="1.01",
+            amount_sompi=None,
+            priority_fee_sompi="0",
+        )
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert seen["call"] == (
+        "POST",
+        "/wallet/send-kaspa/preview",
+        "http://127.0.0.1:3010",
+        {
+            "destinationAddress": "kaspa:qdest123",
+            "amountSompi": "101000000",
+            "priorityFeeSompi": "0",
+        },
+    )
+    assert output["preview"]["amountKas"] == "1.01"
+    assert output["preview"]["feeKas"] == "0.0012"
+    assert output["preview"]["totalRequiredKas"] == "1.0112"
+
+
+def test_cmd_sign_message_posts_to_bridge(monkeypatch, capsys):
+    mod = load_module()
+    seen = {}
+
+    def fake_request_json(method, path, *, base_url, payload=None):
+        seen["call"] = (method, path, base_url, payload)
+        return {
+            "address": "kaspa:qwallet123",
+            "publicKey": "02abc",
+            "signature": "sig:hello",
+        }
+
+    monkeypatch.setattr(mod, "_request_json", fake_request_json)
+
+    mod.cmd_sign_message(
+        argparse.Namespace(
+            bridge_base="http://127.0.0.1:3010",
+            message="hello",
+        )
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert seen["call"] == (
+        "POST",
+        "/wallet/sign-message",
+        "http://127.0.0.1:3010",
+        {"message": "hello"},
+    )
+    assert output["signature"]["signature"] == "sig:hello"

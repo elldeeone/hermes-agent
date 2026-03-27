@@ -30,6 +30,15 @@ function makeCore(overrides = {}) {
     async inspectWallet({ txId } = {}) {
       return { wallet: { address: "kaspa:qwallet" }, txQuery: txId ? { txId } : null };
     },
+    async signWalletMessage(payload) {
+      return { signed: true, ...payload };
+    },
+    async previewKaspaSend(payload) {
+      return { canSend: true, ...payload };
+    },
+    async sendKaspa(payload) {
+      return { accepted: true, txId: "kaspa-send-1", ...payload };
+    },
     dequeueMessages() {
       return { messages: [] };
     },
@@ -160,6 +169,93 @@ test("bridge handler forwards JSON bodies for send and handshake routes", async 
     [
       "send",
       { chatId: "kaspa:qpeer", message: "hello", waitMs: 2500 },
+    ],
+  ]);
+});
+
+test("bridge handler forwards wallet action requests", async () => {
+  const calls = [];
+  const core = makeCore({
+    async signWalletMessage(payload) {
+      calls.push(["sign", payload]);
+      return { signature: "signed-payload", ...payload };
+    },
+    async previewKaspaSend(payload) {
+      calls.push(["preview", payload]);
+      return { canSend: true, feeSompi: "1000", ...payload };
+    },
+    async sendKaspa(payload) {
+      calls.push(["send-kaspa", payload]);
+      return { accepted: true, txId: "kaspa-send-1", ...payload };
+    },
+  });
+
+  await withServer(createBridgeHandler(core), async (baseUrl) => {
+    const signResponse = await fetch(`${baseUrl}/wallet/sign-message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "sign me" }),
+    });
+    assert.equal(signResponse.status, 200);
+    assert.deepEqual(await signResponse.json(), {
+      signature: "signed-payload",
+      message: "sign me",
+    });
+
+    const previewResponse = await fetch(`${baseUrl}/wallet/send-kaspa/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destinationAddress: "kaspa:qpeer",
+        amountSompi: "101000000",
+        priorityFeeSompi: "0",
+      }),
+    });
+    assert.equal(previewResponse.status, 200);
+    assert.deepEqual(await previewResponse.json(), {
+      canSend: true,
+      feeSompi: "1000",
+      destinationAddress: "kaspa:qpeer",
+      amountSompi: "101000000",
+      priorityFeeSompi: "0",
+    });
+
+    const sendResponse = await fetch(`${baseUrl}/wallet/send-kaspa`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destinationAddress: "kaspa:qpeer",
+        amountSompi: "101000000",
+        priorityFeeSompi: "0",
+      }),
+    });
+    assert.equal(sendResponse.status, 200);
+    assert.deepEqual(await sendResponse.json(), {
+      accepted: true,
+      txId: "kaspa-send-1",
+      destinationAddress: "kaspa:qpeer",
+      amountSompi: "101000000",
+      priorityFeeSompi: "0",
+    });
+  });
+
+  assert.deepEqual(calls, [
+    ["sign", { message: "sign me" }],
+    [
+      "preview",
+      {
+        destinationAddress: "kaspa:qpeer",
+        amountSompi: "101000000",
+        priorityFeeSompi: "0",
+      },
+    ],
+    [
+      "send-kaspa",
+      {
+        destinationAddress: "kaspa:qpeer",
+        amountSompi: "101000000",
+        priorityFeeSompi: "0",
+      },
     ],
   ]);
 });

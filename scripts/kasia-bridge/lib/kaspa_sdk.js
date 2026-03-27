@@ -41,4 +41,5 @@ export const {
   XOnlyPublicKey,
   kaspaToSompi,
   payToAddressScript,
+  signMessage,
 } = kaspa;

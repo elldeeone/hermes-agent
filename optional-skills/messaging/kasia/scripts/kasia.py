@@ -94,6 +94,19 @@ def _sompi_to_kas_string(value: int | str | None) -> str:
     return text or "0"
 
 
+def _kas_to_sompi_string(value: str) -> str:
+    try:
+        kas = Decimal(str(value).strip())
+    except Exception as error:  # pragma: no cover - Decimal exception type is noisy
+        raise SystemExit(f"Invalid KAS amount: {value}") from error
+    if kas <= 0:
+        raise SystemExit("Amount must be positive")
+    sompi = (kas * SOMPI_PER_KAS).quantize(Decimal("1"), rounding=ROUND_DOWN)
+    if sompi <= 0:
+        raise SystemExit("Amount must be positive")
+    return str(int(sompi))
+
+
 def _ms_to_iso(value: Any) -> str | None:
     try:
         millis = int(value)
@@ -110,6 +123,23 @@ def _wallet_inspection(bridge_base: str, tx_id: str | None = None) -> dict[str, 
         encoded = urllib.parse.quote(str(tx_id).strip(), safe="")
         path = f"/wallet?txId={encoded}"
     return _request_json("GET", path, base_url=bridge_base)
+
+
+def _resolve_amount_sompi(args: argparse.Namespace) -> str:
+    amount_kas = getattr(args, "amount_kas", None)
+    amount_sompi = getattr(args, "amount_sompi", None)
+    if amount_kas is not None:
+        return _kas_to_sompi_string(amount_kas)
+    normalized_sompi = str(amount_sompi or "").strip()
+    if not normalized_sompi:
+        raise SystemExit("Amount is required")
+    try:
+        sompi = int(normalized_sompi)
+    except ValueError as error:
+        raise SystemExit(f"Invalid sompi amount: {amount_sompi}") from error
+    if sompi <= 0:
+        raise SystemExit("Amount must be positive")
+    return str(sompi)
 
 
 def _wallet_payload(wallet_response: dict[str, Any]) -> dict[str, Any]:
@@ -277,6 +307,74 @@ def cmd_send_status(args: argparse.Namespace) -> None:
     _print_json(response)
 
 
+def cmd_sign_message(args: argparse.Namespace) -> None:
+    response = _request_json(
+        "POST",
+        "/wallet/sign-message",
+        base_url=args.bridge_base,
+        payload={"message": args.message},
+    )
+    _print_json(
+        {
+            "bridgeBase": args.bridge_base,
+            "message": args.message,
+            "signature": response,
+        }
+    )
+
+
+def _wallet_send_payload(response: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(response)
+    amount_sompi = payload.get("amountSompi")
+    if amount_sompi is not None:
+        payload["amountKas"] = _sompi_to_kas_string(amount_sompi)
+    fee_sompi = payload.get("feeSompi")
+    if fee_sompi is not None:
+        payload["feeKas"] = _sompi_to_kas_string(fee_sompi)
+    total_sompi = payload.get("totalRequiredSompi")
+    if total_sompi is not None:
+        payload["totalRequiredKas"] = _sompi_to_kas_string(total_sompi)
+    return payload
+
+
+def cmd_send_kaspa_preview(args: argparse.Namespace) -> None:
+    response = _request_json(
+        "POST",
+        "/wallet/send-kaspa/preview",
+        base_url=args.bridge_base,
+        payload={
+            "destinationAddress": _normalize_address(args.destination_address),
+            "amountSompi": _resolve_amount_sompi(args),
+            "priorityFeeSompi": str(args.priority_fee_sompi or "0"),
+        },
+    )
+    _print_json(
+        {
+            "bridgeBase": args.bridge_base,
+            "preview": _wallet_send_payload(response),
+        }
+    )
+
+
+def cmd_send_kaspa(args: argparse.Namespace) -> None:
+    response = _request_json(
+        "POST",
+        "/wallet/send-kaspa",
+        base_url=args.bridge_base,
+        payload={
+            "destinationAddress": _normalize_address(args.destination_address),
+            "amountSompi": _resolve_amount_sompi(args),
+            "priorityFeeSompi": str(args.priority_fee_sompi or "0"),
+        },
+    )
+    _print_json(
+        {
+            "bridgeBase": args.bridge_base,
+            "send": _wallet_send_payload(response),
+        }
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and operate Hermes's built-in Kasia bridge")
     parser.add_argument("--bridge-base", help="Override the local Kasia bridge base URL")
@@ -326,6 +424,32 @@ def build_parser() -> argparse.ArgumentParser:
     send_status = subparsers.add_parser("send-status", help="Check a prior Kasia send job by job id")
     send_status.add_argument("job_id")
     send_status.set_defaults(func=cmd_send_status)
+
+    sign_message = subparsers.add_parser("sign-message", help="Sign a message with Hermes's Kaspa identity used for Kasia")
+    sign_message.add_argument("--message", required=True)
+    sign_message.set_defaults(func=cmd_sign_message)
+
+    send_kaspa_preview = subparsers.add_parser(
+        "send-kaspa-preview",
+        help="Preview a direct KAS send from Hermes's Kaspa wallet",
+    )
+    send_kaspa_preview.add_argument("destination_address")
+    amount_group = send_kaspa_preview.add_mutually_exclusive_group(required=True)
+    amount_group.add_argument("--amount-kas")
+    amount_group.add_argument("--amount-sompi")
+    send_kaspa_preview.add_argument("--priority-fee-sompi")
+    send_kaspa_preview.set_defaults(func=cmd_send_kaspa_preview)
+
+    send_kaspa = subparsers.add_parser(
+        "send-kaspa",
+        help="Send KAS directly from Hermes's Kaspa wallet",
+    )
+    send_kaspa.add_argument("destination_address")
+    amount_group = send_kaspa.add_mutually_exclusive_group(required=True)
+    amount_group.add_argument("--amount-kas")
+    amount_group.add_argument("--amount-sompi")
+    send_kaspa.add_argument("--priority-fee-sompi")
+    send_kaspa.set_defaults(func=cmd_send_kaspa)
 
     return parser
 

@@ -9,6 +9,7 @@ import {
   Generator,
   PaymentOutput,
   RpcClient,
+  signMessage,
   signTransaction,
   TransactionOutput,
   UtxoContext,
@@ -652,6 +653,24 @@ export class KaspaWalletClient {
     };
   }
 
+  signMessage(message) {
+    if (!this.identity) {
+      throw new Error("Wallet client is not initialized");
+    }
+    const normalizedMessage = String(message || "");
+    if (!normalizedMessage) {
+      throw new Error("Message is required");
+    }
+    return {
+      address: this.identity.address,
+      publicKey: this.identity.publicKeyHex,
+      signature: signMessage({
+        privateKey: this.identity.privateKeyHex,
+        message: normalizedMessage,
+      }),
+    };
+  }
+
   getFeePolicy() {
     return this.feePolicy;
   }
@@ -755,6 +774,126 @@ export class KaspaWalletClient {
             checkedAtMs: this.nowFn(),
           }
         : null,
+    };
+  }
+
+  async previewKaspaSend({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+    feePolicy = this.feePolicy,
+  }) {
+    if (!this.identity || !this.utxoContext) {
+      throw new Error("Wallet client is not initialized");
+    }
+
+    const normalizedDestination = String(destinationAddress || "").trim();
+    if (!normalizedDestination) {
+      throw new Error("Destination address is required");
+    }
+
+    const amount = toBigInt(amountSompi, 0n);
+    if (amount <= 0n) {
+      throw new Error("Amount must be positive");
+    }
+
+    const priorityFee = toBigInt(priorityFeeSompi, 0n);
+    if (priorityFee !== 0n) {
+      return {
+        canSend: false,
+        error: "priorityFeeSompi is not supported for direct Kaspa sends yet",
+        destinationAddress: normalizedDestination,
+        amountSompi: String(amount),
+        priorityFeeSompi: String(priorityFee),
+      };
+    }
+
+    await this._rebuildUtxoContext();
+    const context = this._loadSendContext();
+    this._updateBalanceSnapshot({
+      onChainBalanceSompi: await this._getOnChainBalance(),
+      availableMatureUtxos: context.availableMatureUtxos,
+      availablePendingUtxos: context.availablePendingUtxos,
+      trackedPendingUtxos: context.trackedPendingUtxos,
+    });
+
+    const feeRateSompiPerGram = await this.resolveFeeRate(feePolicy);
+    try {
+      const selectedEntries = selectDirectedRawEntries({
+        availablePendingUtxos: context.availablePendingUtxos,
+        trackedPendingUtxos: context.trackedPendingUtxos,
+        matureUtxos: context.availableMatureUtxos,
+        amountSompi: amount,
+        payloadBytes: new Uint8Array(),
+        networkId: this.identity.networkId,
+        destinationScriptPublicKey: payToAddressScript(new Address(normalizedDestination)),
+        changeScriptPublicKey: this.identity.scriptPublicKey,
+        feeRateSompiPerGram,
+      });
+      const preview = previewRawDirectedSpend({
+        entries: selectedEntries,
+        amountSompi: amount,
+        payloadBytes: new Uint8Array(),
+        networkId: this.identity.networkId,
+        destinationScriptPublicKey: payToAddressScript(new Address(normalizedDestination)),
+        changeScriptPublicKey: this.identity.scriptPublicKey,
+        feeRateSompiPerGram,
+      });
+      const feeSompi = toBigInt(preview.fee, 0n);
+      return {
+        canSend: true,
+        destinationAddress: normalizedDestination,
+        walletAddress: this.identity.address,
+        amountSompi: String(amount),
+        feeSompi: String(feeSompi),
+        totalRequiredSompi: String(amount + feeSompi),
+        inputCount: preview.inputCount,
+        usedPendingInput: Boolean(preview.usesPendingInputs),
+        feeRateSompiPerGram: String(feeRateSompiPerGram),
+        sendState: this.exportSendState(),
+      };
+    } catch (error) {
+      return {
+        canSend: false,
+        error: error?.message || String(error),
+        destinationAddress: normalizedDestination,
+        walletAddress: this.identity.address,
+        amountSompi: String(amount),
+        feeRateSompiPerGram: String(feeRateSompiPerGram),
+        sendState: this.exportSendState(),
+      };
+    }
+  }
+
+  async sendKaspa({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+    feePolicy = this.feePolicy,
+  }) {
+    const priorityFee = toBigInt(priorityFeeSompi, 0n);
+    if (priorityFee !== 0n) {
+      throw new Error("priorityFeeSompi is not supported for direct Kaspa sends yet");
+    }
+
+    const result = await this.sendPayloadTransaction({
+      destinationAddress,
+      amountSompi,
+      payloadBytes: new Uint8Array(),
+      priorityFeeSompi: 0n,
+      feePolicy,
+      strategy: "direct",
+    });
+    return {
+      accepted: true,
+      walletAddress: this.identity?.address || null,
+      destinationAddress: String(destinationAddress || "").trim() || null,
+      amountSompi: String(toBigInt(amountSompi, 0n)),
+      txId: result?.txId || null,
+      transactionCount: result?.transactionCount ?? null,
+      inputCount: result?.inputCount ?? null,
+      usedPendingInput: Boolean(result?.usedPendingInput),
+      sendState: result?.sendState || this.exportSendState(),
     };
   }
 

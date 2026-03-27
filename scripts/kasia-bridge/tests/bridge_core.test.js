@@ -22,6 +22,9 @@ class FakeWalletClient {
     this.isConnected = true;
     this.nodeUrl = "ws://node.invalid";
     this.sentTransactions = [];
+    this.signedMessages = [];
+    this.previewKaspaSends = [];
+    this.kaspaSends = [];
     this.loadedSendState = null;
     this.sendState = {
       reserved_outpoints: [],
@@ -54,6 +57,15 @@ class FakeWalletClient {
 
   getWalletInfo() {
     return this.info;
+  }
+
+  signMessage(message) {
+    this.signedMessages.push(message);
+    return {
+      address: this.info.address,
+      publicKey: this.info.publicKeyHex,
+      signature: `sig:${message}`,
+    };
   }
 
   getNodeUrl() {
@@ -114,6 +126,52 @@ class FakeWalletClient {
 
   exportSendState() {
     return this.sendState;
+  }
+
+  async previewKaspaSend({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+  }) {
+    this.previewKaspaSends.push({
+      destinationAddress,
+      amountSompi: String(amountSompi),
+      priorityFeeSompi: String(priorityFeeSompi),
+    });
+    return {
+      canSend: true,
+      walletAddress: this.info.address,
+      destinationAddress,
+      amountSompi: String(amountSompi),
+      feeSompi: "1000",
+      totalRequiredSompi: String(BigInt(amountSompi) + 1000n),
+      inputCount: 1,
+      usedPendingInput: false,
+      sendState: this.sendState,
+    };
+  }
+
+  async sendKaspa({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+  }) {
+    this.kaspaSends.push({
+      destinationAddress,
+      amountSompi: String(amountSompi),
+      priorityFeeSompi: String(priorityFeeSompi),
+    });
+    return {
+      accepted: true,
+      walletAddress: this.info.address,
+      destinationAddress,
+      amountSompi: String(amountSompi),
+      txId: "kaspa-send-1",
+      transactionCount: 1,
+      inputCount: 1,
+      usedPendingInput: false,
+      sendState: this.sendState,
+    };
   }
 
   async hydrateSendState() {}
@@ -280,6 +338,56 @@ test("inspectWallet surfaces wallet tx matches and bridge send job matches", asy
   assert.equal(outgoing.txQuery.found, true);
   assert.equal(outgoing.txQuery.sendJobMatches.length, 1);
   assert.equal(outgoing.txQuery.sendJobMatches[0].jobId, "job-1");
+});
+
+test("wallet action helpers delegate to the wallet client", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "kasia-bridge-"));
+  const walletClient = new FakeWalletClient();
+  const bridge = new KasiaBridgeCore({
+    stateDir,
+    indexerUrl: "http://indexer.invalid",
+    nodeUrl: "ws://node.invalid",
+    network: "mainnet",
+    seedPhrase: "seed",
+    walletClient,
+    fetchImpl: async () => response([]),
+  });
+
+  await bridge.init();
+
+  const signature = await bridge.signWalletMessage({ message: "hello kasia" });
+  assert.equal(signature.signature, "sig:hello kasia");
+  assert.deepEqual(walletClient.signedMessages, ["hello kasia"]);
+
+  const preview = await bridge.previewKaspaSend({
+    destinationAddress: VALID_CONTACT_ADDRESS,
+    amountSompi: "101000000",
+    priorityFeeSompi: "0",
+  });
+  assert.equal(preview.canSend, true);
+  assert.equal(preview.totalRequiredSompi, "101001000");
+  assert.deepEqual(walletClient.previewKaspaSends, [
+    {
+      destinationAddress: VALID_CONTACT_ADDRESS,
+      amountSompi: "101000000",
+      priorityFeeSompi: "0",
+    },
+  ]);
+
+  const send = await bridge.sendKaspa({
+    destinationAddress: VALID_CONTACT_ADDRESS,
+    amountSompi: "101000000",
+    priorityFeeSompi: "0",
+  });
+  assert.equal(send.accepted, true);
+  assert.equal(send.txId, "kaspa-send-1");
+  assert.deepEqual(walletClient.kaspaSends, [
+    {
+      destinationAddress: VALID_CONTACT_ADDRESS,
+      amountSompi: "101000000",
+      priorityFeeSompi: "0",
+    },
+  ]);
 });
 
 test("preflight keeps long contextual messages as one Kasia part when they fit", async () => {

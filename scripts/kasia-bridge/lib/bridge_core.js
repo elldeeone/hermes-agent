@@ -343,6 +343,46 @@ export class KasiaBridgeCore {
     };
   }
 
+  async signWalletMessage({ message }) {
+    const normalizedMessage = String(message || "");
+    if (!normalizedMessage) {
+      throw new Error("Message is required");
+    }
+    return await this._withWalletOperation(() =>
+      this.walletClient.signMessage(normalizedMessage)
+    );
+  }
+
+  async previewKaspaSend({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+  }) {
+    return await this._withWalletOperation(() =>
+      this.walletClient.previewKaspaSend({
+        destinationAddress,
+        amountSompi,
+        priorityFeeSompi,
+        feePolicy: this.feePolicy,
+      })
+    );
+  }
+
+  async sendKaspa({
+    destinationAddress,
+    amountSompi,
+    priorityFeeSompi = 0n,
+  }) {
+    return await this._withWalletOperation(() =>
+      this.walletClient.sendKaspa({
+        destinationAddress,
+        amountSompi,
+        priorityFeeSompi,
+        feePolicy: this.feePolicy,
+      })
+    );
+  }
+
   dequeueMessages() {
     return this.messageQueue.splice(0, this.messageQueue.length);
   }
