@@ -64,6 +64,43 @@ class FakeWalletClient {
     return this.balanceSnapshot;
   }
 
+  async inspectWalletState({ txId = null } = {}) {
+    const txMatches =
+      txId === "incoming-topup"
+        ? [
+            {
+              source: "pending_utxo",
+              txId,
+              key: `${txId}:0`,
+              index: 0,
+              amountSompi: "5000000000",
+            },
+          ]
+        : [];
+    return {
+      wallet: {
+        address: this.info.address,
+        publicKeyHex: this.info.publicKeyHex,
+        network: this.info.network,
+      },
+      balanceSnapshot: this.balanceSnapshot,
+      utxos: {
+        mature: [],
+        pending: [],
+        trackedPending: [],
+      },
+      sendState: this.sendState,
+      txQuery: txId
+        ? {
+            txId,
+            found: txMatches.length > 0,
+            matches: txMatches,
+            checkedAtMs: 999,
+          }
+        : null,
+    };
+  }
+
   async switchNodeUrl(nextNodeUrl) {
     this.nodeUrl = nextNodeUrl;
     this.isConnected = true;
@@ -193,6 +230,56 @@ test("send rejects when there is no active conversation", async () => {
     }),
     /No active Kasia conversation/
   );
+});
+
+test("inspectWallet surfaces wallet tx matches and bridge send job matches", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "kasia-bridge-"));
+  const walletClient = new FakeWalletClient();
+  const bridge = new KasiaBridgeCore({
+    stateDir,
+    indexerUrl: "http://indexer.invalid",
+    nodeUrl: "ws://node.invalid",
+    network: "mainnet",
+    seedPhrase: "seed",
+    walletClient,
+    fetchImpl: async () => response([]),
+  });
+
+  await bridge.init();
+  bridge.state.send_jobs = {
+    "job-1": {
+      job_id: "job-1",
+      chat_id: VALID_CONTACT_ADDRESS,
+      status: "submitted",
+      created_ms: 10,
+      updated_ms: 20,
+      started_ms: 10,
+      finished_ms: 0,
+      submitted_ms: 15,
+      observed_live_ms: 0,
+      indexed_ms: 0,
+      indexed_block_time_ms: 0,
+      total_parts: 1,
+      completed_parts: 1,
+      indexed_parts: 0,
+      tx_ids: ["outgoing-1"],
+      indexed_tx_ids: [],
+      last_tx_id: "outgoing-1",
+      error: null,
+      message_preview: "hello",
+      job_kind: "dm",
+    },
+  };
+
+  const incoming = await bridge.inspectWallet({ txId: "incoming-topup" });
+  assert.equal(incoming.txQuery.found, true);
+  assert.equal(incoming.txQuery.matches[0].source, "pending_utxo");
+  assert.deepEqual(incoming.txQuery.sendJobMatches, []);
+
+  const outgoing = await bridge.inspectWallet({ txId: "outgoing-1" });
+  assert.equal(outgoing.txQuery.found, true);
+  assert.equal(outgoing.txQuery.sendJobMatches.length, 1);
+  assert.equal(outgoing.txQuery.sendJobMatches[0].jobId, "job-1");
 });
 
 test("preflight keeps long contextual messages as one Kasia part when they fit", async () => {

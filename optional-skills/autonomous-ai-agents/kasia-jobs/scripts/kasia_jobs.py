@@ -971,6 +971,68 @@ def cmd_status(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _bridge_wallet_payload(tx_id: str | None = None) -> dict[str, Any]:
+    bridge_base = _resolve_kasia_bridge_base()
+    path = "/wallet"
+    if str(tx_id or "").strip():
+        encoded = urllib.parse.quote(str(tx_id).strip(), safe="")
+        path = f"/wallet?txId={encoded}"
+    wallet_response = _request_json("GET", path, base_url=bridge_base)
+    wallet = wallet_response.get("wallet") or {}
+    snapshot = wallet_response.get("balanceSnapshot") or {}
+    wallet_address = str(wallet.get("address") or "").strip()
+    return {
+        "bridgeBase": bridge_base,
+        "wallet": {
+            "address": _normalize_address(wallet_address) if wallet_address else None,
+            "network": str(wallet.get("network") or "").strip() or None,
+            "fundingState": str(wallet.get("fundingState") or "").strip() or None,
+            "onChainBalanceSompi": str(snapshot.get("onChainBalanceSompi") or "0"),
+            "onChainBalanceKas": _sompi_to_kas_string(snapshot.get("onChainBalanceSompi") or "0"),
+            "availableMatureBalanceSompi": str(snapshot.get("availableMatureBalanceSompi") or "0"),
+            "availableMatureBalanceKas": _sompi_to_kas_string(
+                snapshot.get("availableMatureBalanceSompi") or "0"
+            ),
+            "availablePendingBalanceSompi": str(snapshot.get("availablePendingBalanceSompi") or "0"),
+            "availablePendingBalanceKas": _sompi_to_kas_string(
+                snapshot.get("availablePendingBalanceSompi") or "0"
+            ),
+            "trackedPendingBalanceSompi": str(snapshot.get("trackedPendingBalanceSompi") or "0"),
+            "trackedPendingBalanceKas": _sompi_to_kas_string(
+                snapshot.get("trackedPendingBalanceSompi") or "0"
+            ),
+            "recommendedMinBalanceSompi": str(wallet_response.get("recommendedMinBalanceSompi") or "0"),
+            "recommendedMinBalanceKas": _sompi_to_kas_string(
+                wallet_response.get("recommendedMinBalanceSompi") or "0"
+            ),
+            "matureUtxoCount": int(snapshot.get("matureUtxoCount") or 0),
+            "pendingUtxoCount": int(snapshot.get("pendingUtxoCount") or 0),
+            "trackedPendingUtxoCount": int(snapshot.get("trackedPendingUtxoCount") or 0),
+        },
+        "txQuery": wallet_response.get("txQuery"),
+        "walletInspection": wallet_response,
+    }
+
+
+def cmd_wallet_address(args: argparse.Namespace) -> None:
+    payload = _bridge_wallet_payload()
+    _print_json(
+        {
+            "address": payload["wallet"]["address"],
+            "network": payload["wallet"]["network"],
+            "fundingState": payload["wallet"]["fundingState"],
+        }
+    )
+
+
+def cmd_wallet_status(args: argparse.Namespace) -> None:
+    _print_json(_bridge_wallet_payload())
+
+
+def cmd_wallet_tx(args: argparse.Namespace) -> None:
+    _print_json(_bridge_wallet_payload(tx_id=args.tx_id))
+
+
 def cmd_auth(args: argparse.Namespace) -> None:
     detected_identity = _detect_local_kasia_identity()
     address = _normalize_address(
@@ -2679,6 +2741,28 @@ def build_parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser("status", help="Show API mode and saved session status")
     _add_base_url_option(status)
     status.set_defaults(func=cmd_status)
+
+    wallet_address = subparsers.add_parser(
+        "wallet-address",
+        help="Show Hermes's local Kaspa address used for Kasia and job funding",
+    )
+    _add_base_url_option(wallet_address)
+    wallet_address.set_defaults(func=cmd_wallet_address)
+
+    wallet_status = subparsers.add_parser(
+        "wallet-status",
+        help="Show the local Kaspa wallet balance and funding state used by Kasia",
+    )
+    _add_base_url_option(wallet_status)
+    wallet_status.set_defaults(func=cmd_wallet_status)
+
+    wallet_tx = subparsers.add_parser(
+        "wallet-tx",
+        help="Check whether a txid is visible to Hermes's local Kaspa wallet",
+    )
+    _add_base_url_option(wallet_tx)
+    wallet_tx.add_argument("tx_id")
+    wallet_tx.set_defaults(func=cmd_wallet_tx)
 
     auth = subparsers.add_parser("auth", help="Authenticate and save a local board session")
     _add_base_url_option(auth)

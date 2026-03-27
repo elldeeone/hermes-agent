@@ -82,6 +82,40 @@ function dedupeUtxos(entries) {
   return [...byKey.values()];
 }
 
+function toPublicUtxoEntry(entry) {
+  const txId =
+    String(
+      entry?.tx_id ||
+        entry?.transaction_id ||
+        entry?.outpoint?.transactionId ||
+        ""
+    ).trim() || null;
+  const index = toNumber(entry?.index ?? entry?.outpoint?.index, -1);
+  const key =
+    makeOutpointKey(entry) || (txId && index >= 0 ? makeOutpointKey(txId, index) : null);
+  return {
+    key,
+    txId,
+    index: index >= 0 ? index : null,
+    amountSompi: String(toBigInt(entry?.amount ?? entry?.value, 0n)),
+    observedInMempool: Boolean(entry?.observed_in_mempool),
+    isCoinbase: Boolean(entry?.isCoinbase),
+  };
+}
+
+function matchTxIdInEntries(entries, txId, source) {
+  const normalized = String(txId || "").trim();
+  if (!normalized) {
+    return [];
+  }
+  return entries
+    .filter((entry) => String(entry?.txId || "").trim() === normalized)
+    .map((entry) => ({
+      source,
+      ...entry,
+    }));
+}
+
 function compareContextualUtxos(left, right) {
   const amountDiff = toBigInt(right?.amount, 0n) - toBigInt(left?.amount, 0n);
   if (amountDiff !== 0n) {
@@ -633,6 +667,94 @@ export class KaspaWalletClient {
   getBalanceSnapshot() {
     return {
       ...this._balanceSnapshot,
+    };
+  }
+
+  async inspectWalletState({ txId = null } = {}) {
+    if (!this.identity || !this.utxoContext) {
+      throw new Error("Wallet client is not initialized");
+    }
+
+    const context = this._loadSendContext();
+    const onChainBalanceSompi = await this._getOnChainBalance();
+    this._updateBalanceSnapshot({
+      onChainBalanceSompi,
+      availableMatureUtxos: context.availableMatureUtxos,
+      availablePendingUtxos: context.availablePendingUtxos,
+      trackedPendingUtxos: context.trackedPendingUtxos,
+    });
+
+    const matureUtxos = normalizeUtxoList(context.availableMatureUtxos).map(toPublicUtxoEntry);
+    const pendingUtxos = normalizeUtxoList(context.availablePendingUtxos).map(toPublicUtxoEntry);
+    const trackedPendingUtxos = normalizeUtxoList(context.trackedPendingUtxos).map(toPublicUtxoEntry);
+    const sendState = this.exportSendState();
+
+    const normalizedTxId = String(txId || "").trim();
+    const txMatches = normalizedTxId
+      ? [
+          ...matchTxIdInEntries(matureUtxos, normalizedTxId, "mature_utxo"),
+          ...matchTxIdInEntries(pendingUtxos, normalizedTxId, "pending_utxo"),
+          ...matchTxIdInEntries(
+            trackedPendingUtxos,
+            normalizedTxId,
+            "tracked_pending_utxo"
+          ),
+          ...normalizeUtxoList(sendState.pending_outputs).flatMap((entry) => {
+            const txMatch = String(entry?.tx_id || "").trim() === normalizedTxId;
+            if (!txMatch) {
+              return [];
+            }
+            return [
+              {
+                source: "pending_output",
+                key: String(entry?.key || "").trim() || null,
+                txId: normalizedTxId,
+                index: toNumber(entry?.index, -1),
+                amountSompi: String(toBigInt(entry?.amount, 0n)),
+                observedInMempool: Boolean(entry?.observed_in_mempool),
+              },
+            ];
+          }),
+          ...normalizeUtxoList(sendState.reserved_outpoints).flatMap((entry) => {
+            const key = String(entry?.key || "").trim();
+            if (!key.startsWith(`${normalizedTxId}:`)) {
+              return [];
+            }
+            return [
+              {
+                source: "reserved_outpoint",
+                key,
+                txId: normalizedTxId,
+                index: toNumber(key.split(":")[1], -1),
+                amountSompi: null,
+                reservedAtMs: toNumber(entry?.reserved_at_ms, 0),
+              },
+            ];
+          }),
+        ]
+      : [];
+
+    return {
+      wallet: {
+        address: this.identity.address,
+        publicKeyHex: this.identity.publicKeyHex,
+        network: this.identity.network,
+      },
+      balanceSnapshot: this.getBalanceSnapshot(),
+      utxos: {
+        mature: matureUtxos,
+        pending: pendingUtxos,
+        trackedPending: trackedPendingUtxos,
+      },
+      sendState,
+      txQuery: normalizedTxId
+        ? {
+            txId: normalizedTxId,
+            found: txMatches.length > 0,
+            matches: txMatches,
+            checkedAtMs: this.nowFn(),
+          }
+        : null,
     };
   }
 

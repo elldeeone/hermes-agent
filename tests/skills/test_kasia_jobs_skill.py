@@ -37,6 +37,9 @@ def test_parser_exposes_greenfield_board_control_surface():
 
     commands = set(subparsers.choices)
 
+    assert "wallet-address" in commands
+    assert "wallet-status" in commands
+    assert "wallet-tx" in commands
     assert "agent-me" in commands
     assert "jobs" in commands
     assert "browse" in commands
@@ -53,6 +56,68 @@ def test_parser_exposes_greenfield_board_control_surface():
     assert "verify-submission" in commands
     assert "release-job" in commands
     assert "job-messages" not in commands
+
+
+def test_wallet_status_surfaces_bridge_balance(monkeypatch):
+    mod = load_module()
+
+    monkeypatch.setattr(
+        mod,
+        "_request_json",
+        lambda method, path, *, base_url, payload=None, token=None: {
+            "wallet": {
+                "address": "kaspa:qwallet123",
+                "network": "mainnet",
+                "fundingState": "low",
+            },
+            "balanceSnapshot": {
+                "onChainBalanceSompi": "97123696",
+                "availableMatureBalanceSompi": "97123696",
+                "availablePendingBalanceSompi": "0",
+                "trackedPendingBalanceSompi": "0",
+                "matureUtxoCount": 1,
+                "pendingUtxoCount": 0,
+                "trackedPendingUtxoCount": 0,
+            },
+            "recommendedMinBalanceSompi": "40000000",
+        },
+    )
+
+    payload = mod._bridge_wallet_payload()
+
+    assert payload["wallet"]["address"] == "kaspa:qwallet123"
+    assert payload["wallet"]["fundingState"] == "low"
+    assert payload["wallet"]["onChainBalanceKas"] == "0.97123696"
+    assert payload["wallet"]["availableMatureBalanceKas"] == "0.97123696"
+    assert payload["wallet"]["recommendedMinBalanceKas"] == "0.4"
+
+
+def test_wallet_tx_passes_through_tx_query(monkeypatch):
+    mod = load_module()
+    seen_paths = []
+
+    def fake_request_json(method, path, *, base_url, payload=None, token=None):
+        seen_paths.append(path)
+        return {
+            "wallet": {
+                "address": "kaspa:qwallet123",
+                "network": "mainnet",
+                "fundingState": "ready",
+            },
+            "balanceSnapshot": {},
+            "txQuery": {
+                "txId": "tx-topup",
+                "found": True,
+                "matches": [{"source": "pending_utxo", "txId": "tx-topup"}],
+            },
+        }
+
+    monkeypatch.setattr(mod, "_request_json", fake_request_json)
+
+    payload = mod._bridge_wallet_payload(tx_id="tx-topup")
+
+    assert seen_paths == ["/wallet?txId=tx-topup"]
+    assert payload["txQuery"]["found"] is True
 
 
 def test_poster_dashboard_prefers_job_status_over_missing_escrow(monkeypatch):

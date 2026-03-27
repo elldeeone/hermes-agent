@@ -27,6 +27,9 @@ function makeCore(overrides = {}) {
     health() {
       return { ok: true };
     },
+    async inspectWallet({ txId } = {}) {
+      return { wallet: { address: "kaspa:qwallet" }, txQuery: txId ? { txId } : null };
+    },
     dequeueMessages() {
       return { messages: [] };
     },
@@ -71,6 +74,12 @@ test("bridge handler exposes health and decoded chat lookups", async () => {
     health() {
       return { walletAddress: "kaspa:qwallet" };
     },
+    async inspectWallet({ txId } = {}) {
+      return {
+        wallet: { address: "kaspa:qwallet" },
+        txQuery: txId ? { txId, found: true } : null,
+      };
+    },
     getChatInfo(chatId) {
       return { chatId, kind: "dm" };
     },
@@ -80,6 +89,13 @@ test("bridge handler exposes health and decoded chat lookups", async () => {
     const healthResponse = await fetch(`${baseUrl}/health`);
     assert.equal(healthResponse.status, 200);
     assert.deepEqual(await healthResponse.json(), { walletAddress: "kaspa:qwallet" });
+
+    const walletResponse = await fetch(`${baseUrl}/wallet?txId=tx-topup`);
+    assert.equal(walletResponse.status, 200);
+    assert.deepEqual(await walletResponse.json(), {
+      wallet: { address: "kaspa:qwallet" },
+      txQuery: { txId: "tx-topup", found: true },
+    });
 
     const chatResponse = await fetch(`${baseUrl}/chat/${encodeURIComponent("kaspa:qpeer")}`);
     assert.equal(chatResponse.status, 200);

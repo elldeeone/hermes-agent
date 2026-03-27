@@ -273,6 +273,76 @@ export class KasiaBridgeCore {
     };
   }
 
+  async inspectWallet({ txId = null } = {}) {
+    const health = this.health();
+    const inspection =
+      typeof this.walletClient.inspectWalletState === "function"
+        ? await this.walletClient.inspectWalletState({ txId })
+        : {
+            wallet: {
+              address: this.state.wallet.address,
+              publicKeyHex: this.state.wallet.public_key || null,
+              network: this.state.wallet.network || this.network,
+            },
+            balanceSnapshot: this.walletClient.getBalanceSnapshot?.() || {},
+            utxos: {
+              mature: [],
+              pending: [],
+              trackedPending: [],
+            },
+            sendState: this.walletClient.exportSendState?.() || {},
+            txQuery: txId
+              ? {
+                  txId: String(txId || "").trim(),
+                  found: false,
+                  matches: [],
+                  checkedAtMs: this.nowFn(),
+                }
+              : null,
+          };
+
+    const normalizedTxId = String(txId || "").trim();
+    const sendJobMatches = normalizedTxId
+      ? Object.values(this.state.send_jobs || {})
+          .filter((job) => {
+            const txIds = Array.isArray(job?.tx_ids) ? job.tx_ids : [];
+            const indexedTxIds = Array.isArray(job?.indexed_tx_ids) ? job.indexed_tx_ids : [];
+            return (
+              txIds.includes(normalizedTxId) ||
+              indexedTxIds.includes(normalizedTxId) ||
+              String(job?.last_tx_id || "").trim() === normalizedTxId
+            );
+          })
+          .map((job) => toPublicSendJob(job))
+      : [];
+
+    const txQuery = inspection.txQuery
+      ? {
+          ...inspection.txQuery,
+          sendJobMatches,
+          found: Boolean(inspection.txQuery.found || sendJobMatches.length > 0),
+        }
+      : null;
+
+    return {
+      bridgeStatus: health.status,
+      activeIndexerUrl: health.indexerUrl,
+      activeNodeUrl: health.nodeUrl,
+      feePolicy: health.feePolicy,
+      feeRateSompiPerGram: health.feeRateSompiPerGram,
+      wallet: {
+        ...inspection.wallet,
+        fundingState: health.walletFundingState,
+      },
+      balanceSnapshot: inspection.balanceSnapshot,
+      recommendedMinBalanceSompi: health.recommendedMinBalanceSompi,
+      minimumMessageAmountSompi: health.minimumMessageAmountSompi,
+      utxos: inspection.utxos,
+      sendState: inspection.sendState,
+      txQuery,
+    };
+  }
+
   dequeueMessages() {
     return this.messageQueue.splice(0, this.messageQueue.length);
   }

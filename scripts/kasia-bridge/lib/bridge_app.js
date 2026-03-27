@@ -65,6 +65,11 @@ export function createBridgeHandler(core) {
         return sendJson(res, 200, core.health());
       }
 
+      if (method === "GET" && url.pathname === "/wallet") {
+        const txId = String(url.searchParams.get("txId") || "").trim() || null;
+        return sendJson(res, 200, await core.inspectWallet({ txId }));
+      }
+
       if (method === "GET" && url.pathname === "/messages") {
         return sendJson(res, 200, core.dequeueMessages());
       }
