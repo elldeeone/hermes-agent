@@ -18,7 +18,9 @@ export function resolveStateDir(value, homeDir = homedir()) {
 }
 
 export function sendJson(res, statusCode, payload) {
-  const body = `${JSON.stringify(payload)}\n`;
+  const body = `${JSON.stringify(payload, (_key, value) => (
+    typeof value === "bigint" ? value.toString() : value
+  ))}\n`;
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(body),

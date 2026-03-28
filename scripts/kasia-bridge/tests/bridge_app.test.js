@@ -112,6 +112,42 @@ test("bridge handler exposes health and decoded chat lookups", async () => {
   });
 });
 
+test("bridge handler serializes BigInt wallet inspection fields as strings", async () => {
+  const core = makeCore({
+    async inspectWallet() {
+      return {
+        wallet: {
+          address: "kaspa:qwallet",
+          onChainBalanceSompi: 5n,
+        },
+        utxos: {
+          mature: [{ amountSompi: 7n }],
+        },
+        txQuery: {
+          checkedAtMs: 11n,
+        },
+      };
+    },
+  });
+
+  await withServer(createBridgeHandler(core), async (baseUrl) => {
+    const walletResponse = await fetch(`${baseUrl}/wallet`);
+    assert.equal(walletResponse.status, 200);
+    assert.deepEqual(await walletResponse.json(), {
+      wallet: {
+        address: "kaspa:qwallet",
+        onChainBalanceSompi: "5",
+      },
+      utxos: {
+        mature: [{ amountSompi: "7" }],
+      },
+      txQuery: {
+        checkedAtMs: "11",
+      },
+    });
+  });
+});
+
 test("bridge handler forwards JSON bodies for send and handshake routes", async () => {
   const calls = [];
   const core = makeCore({

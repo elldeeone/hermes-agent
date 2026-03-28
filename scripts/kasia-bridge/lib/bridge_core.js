@@ -1123,28 +1123,69 @@ export class KasiaBridgeCore {
     throw lastError || new Error("Failed to initialize the Kasia wallet client");
   }
 
+  async _recoverWalletClient(nodeUrl) {
+    try {
+      await this.walletClient.close?.();
+    } catch {}
+
+    let walletInfo;
+    if (this.walletClient.switchNodeUrl) {
+      walletInfo = await withTimeout(
+        this.walletClient.switchNodeUrl(nodeUrl),
+        DEFAULT_NODE_STARTUP_TIMEOUT_MS,
+        `Kasia wallet reconnect via ${nodeUrl}`
+      );
+    } else {
+      walletInfo = await withTimeout(
+        this.walletClient.init(),
+        DEFAULT_NODE_STARTUP_TIMEOUT_MS,
+        `Kasia wallet reconnect via ${nodeUrl}`
+      );
+    }
+    this.walletInfo = walletInfo || this.walletClient.getWalletInfo?.();
+    return this.walletInfo;
+  }
+
   async _withWalletOperation(operation) {
     const candidates = this.nodePool.getCandidates();
     let lastError = null;
     for (const nodeUrl of candidates) {
-      try {
-        if (
-          this.walletClient.switchNodeUrl &&
-          this.walletClient.getNodeUrl?.() &&
-          this.walletClient.getNodeUrl() !== nodeUrl
-        ) {
-          await this.walletClient.switchNodeUrl(nodeUrl);
-          this.walletInfo = this.walletClient.getWalletInfo();
+      let recovered = false;
+      while (true) {
+        try {
+          if (
+            this.walletClient.switchNodeUrl &&
+            this.walletClient.getNodeUrl?.() &&
+            this.walletClient.getNodeUrl() !== nodeUrl
+          ) {
+            await this.walletClient.switchNodeUrl(nodeUrl);
+            this.walletInfo = this.walletClient.getWalletInfo();
+          }
+          const result = await operation(nodeUrl);
+          this.nodePool.markSuccess(nodeUrl);
+          return result;
+        } catch (error) {
+          lastError = error;
+          const retryable = isRetryableNodeError(error);
+          this.nodePool.markFailure(nodeUrl, error?.message || error);
+          if (!retryable) {
+            throw error;
+          }
+          if (!recovered) {
+            recovered = true;
+            try {
+              await this._recoverWalletClient(nodeUrl);
+              continue;
+            } catch (recoveryError) {
+              lastError = recoveryError;
+              this.nodePool.markFailure(nodeUrl, recoveryError?.message || recoveryError);
+            }
+          }
+          if (candidates.length === 1) {
+            throw lastError;
+          }
+          break;
         }
-        const result = await operation(nodeUrl);
-        this.nodePool.markSuccess(nodeUrl);
-        return result;
-      } catch (error) {
-        lastError = error;
-        if (!isRetryableNodeError(error) || candidates.length === 1) {
-          throw error;
-        }
-        this.nodePool.markFailure(nodeUrl, error?.message || error);
       }
     }
     throw lastError || new Error("Kasia wallet operation failed");

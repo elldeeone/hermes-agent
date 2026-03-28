@@ -244,6 +244,35 @@ class FailoverWalletClient extends FakeWalletClient {
   }
 }
 
+class ReconnectingWalletClient extends FakeWalletClient {
+  constructor() {
+    super();
+    this.closeCalls = 0;
+    this.switchCalls = [];
+    this.previewAttempts = 0;
+  }
+
+  async close() {
+    this.closeCalls += 1;
+    this.isConnected = false;
+  }
+
+  async switchNodeUrl(nextNodeUrl) {
+    this.switchCalls.push(nextNodeUrl);
+    this.nodeUrl = nextNodeUrl;
+    this.isConnected = true;
+    return this.info;
+  }
+
+  async previewKaspaSend(args) {
+    this.previewAttempts += 1;
+    if (this.previewAttempts === 1) {
+      throw new Error("RPC Server (remote error) -> WebSocket -> WebSocket is not connected");
+    }
+    return await super.previewKaspaSend(args);
+  }
+}
+
 function response(jsonPayload) {
   return {
     ok: true,
@@ -392,6 +421,33 @@ test("wallet action helpers delegate to the wallet client", async () => {
       feePolicy: "priority",
     },
   ]);
+});
+
+test("wallet action helpers reconnect and retry on retryable websocket errors", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "kasia-bridge-"));
+  const walletClient = new ReconnectingWalletClient();
+  const bridge = new KasiaBridgeCore({
+    stateDir,
+    indexerUrl: "http://indexer.invalid",
+    nodeUrl: "ws://node.invalid",
+    network: "mainnet",
+    seedPhrase: "seed",
+    walletClient,
+    fetchImpl: async () => response([]),
+  });
+
+  await bridge.init();
+
+  const preview = await bridge.previewKaspaSend({
+    destinationAddress: VALID_CONTACT_ADDRESS,
+    amountSompi: "20000000",
+    feePolicy: "auto",
+  });
+
+  assert.equal(preview.canSend, true);
+  assert.equal(walletClient.previewAttempts, 2);
+  assert.equal(walletClient.closeCalls, 1);
+  assert.deepEqual(walletClient.switchCalls, ["ws://node.invalid"]);
 });
 
 test("preflight keeps long contextual messages as one Kasia part when they fit", async () => {
