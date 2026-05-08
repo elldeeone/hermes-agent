@@ -130,6 +130,7 @@ Backend split:
 | `kaspa_price` | Read-only Kaspa REST `/info/price` USD price lookup. | — |
 | `kaspa_marketcap` | Read-only Kaspa REST `/info/marketcap` price and market-cap lookup. | — |
 | `kaspa_hashrate` | Read-only Kaspa REST `/info/hashrate` current network hashrate lookup. | — |
+| `kaspa_kaspad_info` | Read-only Kaspa REST `/info/kaspad` connected kaspad metadata lookup. | — |
 | `kaspa_blockreward` | Read-only Kaspa REST `/info/blockreward` current block reward lookup. | — |
 | `kaspa_halving_info` | Read-only Kaspa REST `/info/halving` chromatic-halving metadata lookup. | — |
 | `kaspa_virtual_chain_blue_score` | Read-only Kaspa REST `/info/virtual-chain-blue-score` sink blue-score lookup. | — |
@@ -141,6 +142,7 @@ Backend split:
 | `kaspa_address_transaction_count` | Read-only transaction-count lookup for a Kaspa address. | — |
 | `kaspa_address_transactions` | Read-only limited transaction page lookup for a Kaspa address using `/addresses/{kaspaAddress}/full-transactions-page`; accepts optional `limit`, `before`, and `after` pagination inputs. | — |
 | `kaspa_address_utxo_count` | Read-only UTXO count lookup for a Kaspa address. | — |
+| `kaspa_address_utxos` | Read-only open UTXO lookup for a Kaspa address using `/addresses/{kaspaAddress}/utxos`. | — |
 | `kaspa_block_lookup` | Read-only block lookup by block hash/id using the Kaspa REST `/blocks/{blockId}` endpoint. | — |
 | `kaspa_transaction_lookup` | Read-only transaction lookup by transaction id using the Kaspa REST `/transactions/{transaction_id}` endpoint. | — |
 | `kns_domain_owner` | Read-only owner lookup for a KNS domain such as `example.kas`. | — |

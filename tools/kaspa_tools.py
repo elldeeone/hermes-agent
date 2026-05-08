@@ -353,6 +353,11 @@ def kaspa_hashrate(args: dict, **kwargs) -> str:
     return _kaspa_info_tool(args, path="/info/hashrate", payload_key="hashrate")
 
 
+def kaspa_kaspad_info(args: dict, **kwargs) -> str:
+    """Fetch read-only connected kaspad metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/kaspad", payload_key="kaspad")
+
+
 def kaspa_blockreward(args: dict, **kwargs) -> str:
     """Fetch read-only Kaspa block reward metadata from the REST API."""
     return _kaspa_info_tool(args, path="/info/blockreward", payload_key="blockreward")
@@ -538,6 +543,11 @@ def kaspa_address_balance(args: dict, **kwargs) -> str:
 def kaspa_address_utxo_count(args: dict, **kwargs) -> str:
     """Fetch the read-only UTXO count payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="utxos/count", payload_key="utxo_count")
+
+
+def kaspa_address_utxos(args: dict, **kwargs) -> str:
+    """Fetch the read-only open UTXO payload for a Kaspa address."""
+    return _kaspa_address_tool(args, suffix="utxos", payload_key="utxos")
 
 
 def kaspa_address_name(args: dict, **kwargs) -> str:
@@ -1007,6 +1017,13 @@ _register_kaspa_info_tool(
 )
 
 _register_kaspa_info_tool(
+    name="kaspa_kaspad_info",
+    handler=kaspa_kaspad_info,
+    endpoint="/info/kaspad",
+    description="Read-only connected kaspad info lookup",
+)
+
+_register_kaspa_info_tool(
     name="kaspa_blockreward",
     handler=kaspa_blockreward,
     endpoint="/info/blockreward",
@@ -1138,6 +1155,12 @@ _register_kaspa_address_tool(
     name="kaspa_address_utxo_count",
     handler=kaspa_address_utxo_count,
     description="Read-only UTXO count lookup for a Kaspa address.",
+)
+
+_register_kaspa_address_tool(
+    name="kaspa_address_utxos",
+    handler=kaspa_address_utxos,
+    description="Read-only open UTXO lookup for a Kaspa address.",
 )
 
 registry.register(

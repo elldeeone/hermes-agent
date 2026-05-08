@@ -75,6 +75,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_transaction_count",
         "kaspa_address_transactions",
         "kaspa_address_utxo_count",
+        "kaspa_address_utxos",
         "kaspa_api_health",
         "kaspa_block_lookup",
         "kaspa_blockdag_info",
@@ -83,6 +84,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_fee_estimate",
         "kaspa_halving_info",
         "kaspa_hashrate",
+        "kaspa_kaspad_info",
         "kaspa_marketcap",
         "kaspa_network_info",
         "kaspa_node_info",
@@ -105,6 +107,7 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_fee_estimate" not in _HERMES_CORE_TOOLS
     assert "kaspa_hashrate" not in _HERMES_CORE_TOOLS
     assert "kaspa_halving_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_kaspad_info" not in _HERMES_CORE_TOOLS
     assert "kaspa_marketcap" not in _HERMES_CORE_TOOLS
     assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
     assert "kaspa_price" not in _HERMES_CORE_TOOLS
@@ -115,6 +118,7 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_address_transaction_count" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_transactions" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_utxo_count" not in _HERMES_CORE_TOOLS
+    assert "kaspa_address_utxos" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_rpc_tcp_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_info" not in _HERMES_CORE_TOOLS
     assert "kaspa_transaction_lookup" not in _HERMES_CORE_TOOLS
@@ -251,6 +255,7 @@ def test_kaspa_fee_estimate_fetches_fee_estimate(monkeypatch):
         ("kaspa_price", "/info/price", "price", b'{"price":0.12}', {"price": 0.12}),
         ("kaspa_marketcap", "/info/marketcap", "marketcap", b'{"marketCap":3000000000}', {"marketCap": 3000000000}),
         ("kaspa_hashrate", "/info/hashrate", "hashrate", b'{"hashrate":123456}', {"hashrate": 123456}),
+        ("kaspa_kaspad_info", "/info/kaspad", "kaspad", b'{"serverVersion":"1.2.3"}', {"serverVersion": "1.2.3"}),
         ("kaspa_blockreward", "/info/blockreward", "blockreward", b'{"blockreward":103.5}', {"blockreward": 103.5}),
         ("kaspa_halving_info", "/info/halving", "halving", b'{"nextHalvingTimestamp":123456789}', {"nextHalvingTimestamp": 123456789}),
         ("kaspa_virtual_chain_blue_score", "/info/virtual-chain-blue-score", "blue_score", b'{"blueScore":12345}', {"blueScore": 12345}),
@@ -762,6 +767,22 @@ def test_kaspa_address_utxo_count_fetches_count(monkeypatch):
 
     assert result["ok"] is True
     assert result["utxo_count"] == {"count": 7}
+
+
+def test_kaspa_address_utxos_fetches_open_outputs(monkeypatch):
+    def fake_urlopen(req, timeout):
+        assert req.full_url == "https://api.example/addresses/kaspa%3Aqabc/utxos"
+        return FakeResponse(200, b'[{"outpoint":{"transactionId":"tx1","index":0},"utxoEntry":{"amount":"1000"}}]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_address_utxos({
+        "url": "https://api.example",
+        "address": "kaspa:qabc",
+    }))
+
+    assert result["ok"] is True
+    assert result["utxos"] == [{"outpoint": {"transactionId": "tx1", "index": 0}, "utxoEntry": {"amount": "1000"}}]
 
 
 def test_kaspa_address_name_returns_name_payload(monkeypatch):
