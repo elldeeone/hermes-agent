@@ -236,6 +236,9 @@ TOOLSETS = {
         "tools": [
             "kaspa_api_health",
             "kaspa_network_info",
+            "kaspa_blockdag_info",
+            "kaspa_coin_supply",
+            "kaspa_fee_estimate",
             "kaspa_node_rpc_tcp_health",
             "kaspa_node_info",
             "kasia_indexer_health",

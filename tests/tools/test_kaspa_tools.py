@@ -75,6 +75,9 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_utxo_count",
         "kaspa_api_health",
         "kaspa_block_lookup",
+        "kaspa_blockdag_info",
+        "kaspa_coin_supply",
+        "kaspa_fee_estimate",
         "kaspa_network_info",
         "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
@@ -88,6 +91,9 @@ def test_toolset_resolves_kaspa_tools():
 def test_tools_are_not_in_core_tools():
     assert "kaspa_api_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_block_lookup" not in _HERMES_CORE_TOOLS
+    assert "kaspa_blockdag_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_coin_supply" not in _HERMES_CORE_TOOLS
+    assert "kaspa_fee_estimate" not in _HERMES_CORE_TOOLS
     assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
@@ -146,6 +152,81 @@ def test_kaspa_network_info_fetches_network(monkeypatch):
         "network": {"networkName": "mainnet", "serverVersion": "1.0.0"},
     }
     assert seen == {"url": result["endpoint"], "timeout": 3}
+
+
+def test_kaspa_blockdag_info_fetches_blockdag(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"networkName":"mainnet","blockCount":123}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_blockdag_info({
+        "url": "https://api.example/",
+        "timeout_seconds": 4,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/info/blockdag",
+        "status_code": 200,
+        "blockdag": {"networkName": "mainnet", "blockCount": 123},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 4}
+
+
+def test_kaspa_coin_supply_fetches_supply(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"maxSupply":28700000000,"circulatingSupply":24000000000}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_coin_supply({
+        "url": "https://api.example",
+        "timeout_seconds": 5,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/info/coinsupply",
+        "status_code": 200,
+        "coin_supply": {"maxSupply": 28700000000, "circulatingSupply": 24000000000},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 5}
+
+
+def test_kaspa_fee_estimate_fetches_fee_estimate(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"priorityBucket":{"feerate":1.0}}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_fee_estimate({
+        "url": "https://api.example",
+        "timeout_seconds": 6,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/info/fee-estimate",
+        "status_code": 200,
+        "fee_estimate": {"priorityBucket": {"feerate": 1.0}},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 6}
 
 
 def test_node_info_invokes_readonly_probe_and_returns_normalized_payload(monkeypatch):

@@ -295,6 +295,39 @@ def kaspa_network_info(args: dict, **kwargs) -> str:
     return _successful_json_result(result, "network")
 
 
+def kaspa_blockdag_info(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa BlockDAG metadata from the REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        result = _get_json(base_url, "/info/blockdag", args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "blockdag")
+
+
+def kaspa_coin_supply(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa coin supply metadata from the REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        result = _get_json(base_url, "/info/coinsupply", args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "coin_supply")
+
+
+def kaspa_fee_estimate(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa fee estimate metadata from the REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        result = _get_json(base_url, "/info/fee-estimate", args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "fee_estimate")
+
+
 def kasia_indexer_health(args: dict, **kwargs) -> str:
     """Check the public/read-only Kasia indexer metrics endpoint."""
     return _health_tool(
@@ -786,6 +819,63 @@ registry.register(
     },
     handler=kaspa_network_info,
     description="Read-only Kaspa network metadata lookup",
+)
+
+registry.register(
+    name="kaspa_blockdag_info",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_blockdag_info",
+        "description": "Read-only Kaspa REST /info/blockdag metadata lookup.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_blockdag_info,
+    description="Read-only Kaspa BlockDAG metadata lookup",
+)
+
+registry.register(
+    name="kaspa_coin_supply",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_coin_supply",
+        "description": "Read-only Kaspa REST /info/coinsupply lookup.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_coin_supply,
+    description="Read-only Kaspa coin supply lookup",
+)
+
+registry.register(
+    name="kaspa_fee_estimate",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_fee_estimate",
+        "description": "Read-only Kaspa REST /info/fee-estimate lookup.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_fee_estimate,
+    description="Read-only Kaspa fee estimate lookup",
 )
 
 registry.register(
