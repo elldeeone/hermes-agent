@@ -126,10 +126,14 @@ Backend split:
 | `kaspa_network_info` | Read-only Kaspa REST `/info/network` metadata lookup. | — |
 | `kaspa_blockdag_info` | Read-only Kaspa REST `/info/blockdag` BlockDAG metadata lookup. | — |
 | `kaspa_coin_supply` | Read-only Kaspa REST `/info/coinsupply` supply metadata lookup. | — |
+| `kaspa_circulating_coin_supply` | Read-only Kaspa REST `/info/coinsupply/circulating` circulating-supply lookup. | — |
+| `kaspa_total_coin_supply` | Read-only Kaspa REST `/info/coinsupply/total` total-supply lookup. | — |
 | `kaspa_fee_estimate` | Read-only Kaspa REST `/info/fee-estimate` fee bucket lookup. | — |
 | `kaspa_price` | Read-only Kaspa REST `/info/price` USD price lookup. | — |
 | `kaspa_marketcap` | Read-only Kaspa REST `/info/marketcap` price and market-cap lookup. | — |
 | `kaspa_hashrate` | Read-only Kaspa REST `/info/hashrate` current network hashrate lookup. | — |
+| `kaspa_max_hashrate` | Read-only Kaspa REST `/info/hashrate/max` max-hashrate lookup. | — |
+| `kaspa_hashrate_history` | Read-only Kaspa REST `/info/hashrate/history` lookup, optionally scoped to a UTC day or month and resolution. | — |
 | `kaspa_kaspad_info` | Read-only Kaspa REST `/info/kaspad` connected kaspad metadata lookup. | — |
 | `kaspa_blockreward` | Read-only Kaspa REST `/info/blockreward` current block reward lookup. | — |
 | `kaspa_halving_info` | Read-only Kaspa REST `/info/halving` chromatic-halving metadata lookup. | — |

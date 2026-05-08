@@ -353,6 +353,38 @@ def kaspa_hashrate(args: dict, **kwargs) -> str:
     return _kaspa_info_tool(args, path="/info/hashrate", payload_key="hashrate")
 
 
+def kaspa_max_hashrate(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa max hashrate metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/hashrate/max", payload_key="max_hashrate")
+
+
+def kaspa_hashrate_history(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa hashrate history from the REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        day_or_month = _optional_string(args, "day_or_month")
+        resolution = _optional_string(args, "resolution")
+        query = {"resolution": resolution} if resolution else None
+        path = "/info/hashrate/history"
+        if day_or_month:
+            path = f"{path}/{quote(day_or_month, safe='')}"
+        result = _get_json(base_url, path, args.get("timeout_seconds"), query=query)
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "hashrate_history")
+
+
+def kaspa_circulating_coin_supply(args: dict, **kwargs) -> str:
+    """Fetch read-only circulating Kaspa supply metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/coinsupply/circulating", payload_key="circulating_coin_supply")
+
+
+def kaspa_total_coin_supply(args: dict, **kwargs) -> str:
+    """Fetch read-only total Kaspa supply metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/coinsupply/total", payload_key="total_coin_supply")
+
+
 def kaspa_kaspad_info(args: dict, **kwargs) -> str:
     """Fetch read-only connected kaspad metadata from the REST API."""
     return _kaspa_info_tool(args, path="/info/kaspad", payload_key="kaspad")
@@ -739,6 +771,16 @@ _EPOCH_MILLIS_CURSOR_SCHEMA = {
     "minimum": 0,
 }
 
+_HASHRATE_HISTORY_RESOLUTION_SCHEMA = {
+    "type": "string",
+    "description": "Optional hashrate-history resolution accepted by the Kaspa REST API, for example 15m, 1h, 3h, 1d, or 7d.",
+}
+
+_DAY_OR_MONTH_SCHEMA = {
+    "type": "string",
+    "description": "Optional UTC day or month cursor in YYYY-MM-DD or YYYY-MM format.",
+}
+
 _KASPA_ADDRESS_SCHEMA = {
     "type": "string",
     "description": "Kaspa address to query.",
@@ -1014,6 +1056,48 @@ _register_kaspa_info_tool(
     handler=kaspa_hashrate,
     endpoint="/info/hashrate",
     description="Read-only Kaspa hashrate lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_max_hashrate",
+    handler=kaspa_max_hashrate,
+    endpoint="/info/hashrate/max",
+    description="Read-only Kaspa max hashrate lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_circulating_coin_supply",
+    handler=kaspa_circulating_coin_supply,
+    endpoint="/info/coinsupply/circulating",
+    description="Read-only Kaspa circulating coin supply lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_total_coin_supply",
+    handler=kaspa_total_coin_supply,
+    endpoint="/info/coinsupply/total",
+    description="Read-only Kaspa total coin supply lookup",
+)
+
+registry.register(
+    name="kaspa_hashrate_history",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_hashrate_history",
+        "description": "Read-only Kaspa REST /info/hashrate/history lookup, optionally for a specific UTC day or month.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "day_or_month": _DAY_OR_MONTH_SCHEMA,
+                "resolution": _HASHRATE_HISTORY_RESOLUTION_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_hashrate_history,
+    description="Read-only Kaspa hashrate history lookup",
 )
 
 _register_kaspa_info_tool(
