@@ -235,6 +235,7 @@ TOOLSETS = {
         "description": "Read-only Kaspa/Kasia API and indexer tools",
         "tools": [
             "kaspa_api_health",
+            "kaspa_node_rpc_tcp_health",
             "kasia_indexer_health",
             "kasia_indexer_handshakes_by_sender",
             "kasia_indexer_handshakes_by_receiver",

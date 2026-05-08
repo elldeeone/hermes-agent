@@ -6,9 +6,9 @@ description: "Authoritative reference for Hermes built-in tools, grouped by tool
 
 # Built-in Tools Reference
 
-This page documents all 82 built-in tools in the Hermes tool registry, grouped by toolset. Availability varies by platform, credentials, and enabled toolsets.
+This page documents all 83 built-in tools in the Hermes tool registry, grouped by toolset. Availability varies by platform, credentials, and enabled toolsets.
 
-**Quick counts:** 10 browser tools (core) + 2 browser-cdp tools, 4 file tools, 10 RL tools, 4 Home Assistant tools, 14 Kaspa/Kasia tools, 2 terminal tools, 2 web tools, 5 Feishu tools, 7 Spotify tools, 5 Yuanbao tools, 2 Discord tools, and 15 standalone tools across other toolsets.
+**Quick counts:** 10 browser tools (core) + 2 browser-cdp tools, 4 file tools, 10 RL tools, 4 Home Assistant tools, 15 Kaspa/Kasia tools, 2 terminal tools, 2 web tools, 5 Feishu tools, 7 Spotify tools, 5 Yuanbao tools, 2 Discord tools, and 15 standalone tools across other toolsets.
 
 :::tip MCP Tools
 In addition to built-in tools, Hermes can load tools dynamically from MCP servers. MCP tools appear with a server-name prefix (e.g., `github_create_issue` for the `github` MCP server). See [MCP Integration](/docs/user-guide/features/mcp) for configuration.
@@ -118,11 +118,12 @@ Backend split:
 - **Kaspa REST reads** default to `https://api.kaspa.org` and can be overridden with `KASPA_API_URL` or per-call `url`.
 - **Kasia indexer reads** default to `https://indexer.kasia.fyi` and can be overridden with `KASIA_INDEXER_URL` or per-call `url`.
 - **KNS reads** default to `https://api.knsdomains.org/mainnet` and can be overridden with `KNS_API_URL` or per-call `url`.
-- **Private nodes** are expected to be used for future node/RPC operations such as transaction construction, validation, or broadcast, not for explorer-style historical address queries unless a REST/indexer facade is added.
+- **Private nodes** are expected to be used for future node/RPC operations such as transaction construction, validation, or broadcast, not for explorer-style historical address queries unless a REST/indexer facade is added. This phase includes only `kaspa_node_rpc_tcp_health`, a TCP reachability check that does not issue an RPC request.
 
 | Tool | Description | Requires environment |
 |------|-------------|----------------------|
 | `kaspa_api_health` | Read-only check of the Kaspa REST `/info/health` endpoint. | — |
+| `kaspa_node_rpc_tcp_health` | Read-only TCP reachability check for a kaspad RPC endpoint. Defaults to `KASPA_NODE_RPC_HOST`/`KASPA_NODE_RPC_PORT` or `127.0.0.1:16110`; does not issue an RPC request. | — |
 | `kasia_indexer_health` | Read-only check of the Kasia indexer `/metrics` endpoint. | — |
 | `kaspa_address_balance` | Read-only balance lookup for a Kaspa address. | — |
 | `kaspa_address_name` | Read-only known-name lookup for a Kaspa address. | — |

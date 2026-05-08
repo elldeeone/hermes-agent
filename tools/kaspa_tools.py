@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from typing import Any
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
@@ -15,6 +16,8 @@ USER_AGENT = "HermesAgent/KaspaTools"
 DEFAULT_KASPA_API_URL = "https://api.kaspa.org"
 DEFAULT_KASIA_INDEXER_URL = "https://indexer.kasia.fyi"
 DEFAULT_KNS_API_URL = "https://api.knsdomains.org/mainnet"
+DEFAULT_KASPA_NODE_RPC_HOST = "127.0.0.1"
+DEFAULT_KASPA_NODE_RPC_PORT = 16110
 
 
 def _normalize_base_url(url: str) -> str:
@@ -39,6 +42,19 @@ def _coerce_timeout_seconds(value: Any = None) -> int:
     if timeout > 30:
         return 30
     return timeout
+
+
+def _coerce_tcp_port(value: Any = None) -> int:
+    """Coerce a TCP port to an int in the allowed 1-65535 range."""
+    if value is None or value == "":
+        return DEFAULT_KASPA_NODE_RPC_PORT
+    try:
+        port = int(float(value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("port must be a number") from exc
+    if port < 1 or port > 65535:
+        raise ValueError("port must be between 1 and 65535")
+    return port
 
 
 def _decode_json_body(body: bytes) -> Any:
@@ -272,6 +288,32 @@ def kasia_indexer_health(args: dict, **kwargs) -> str:
     )
 
 
+def kaspa_node_rpc_tcp_health(args: dict, **kwargs) -> str:
+    """Check TCP reachability for a kaspad RPC endpoint without issuing RPC calls."""
+    try:
+        host = _optional_string(args, "host") or os.getenv("KASPA_NODE_RPC_HOST") or DEFAULT_KASPA_NODE_RPC_HOST
+        port = _coerce_tcp_port(args.get("port") or os.getenv("KASPA_NODE_RPC_PORT"))
+        timeout = _coerce_timeout_seconds(args.get("timeout_seconds"))
+        with socket.create_connection((host, port), timeout=timeout):
+            pass
+    except Exception as exc:
+        return tool_error(
+            str(exc),
+            ok=False,
+            host=locals().get("host", DEFAULT_KASPA_NODE_RPC_HOST),
+            port=locals().get("port", DEFAULT_KASPA_NODE_RPC_PORT),
+            timeout_seconds=locals().get("timeout", 10),
+        )
+
+    return tool_result(
+        ok=True,
+        host=host,
+        port=port,
+        protocol_hint="kaspad gRPC/wRPC TCP endpoint; this check verifies reachability only",
+        timeout_seconds=timeout,
+    )
+
+
 def kaspa_address_balance(args: dict, **kwargs) -> str:
     """Fetch the read-only balance payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="balance", payload_key="balance")
@@ -390,6 +432,18 @@ _URL_SCHEMA = {
 _TIMEOUT_SCHEMA = {
     "type": "number",
     "description": "Optional timeout in seconds. Defaults to 10 and is clamped to the 1-30 second range.",
+}
+
+_HOST_SCHEMA = {
+    "type": "string",
+    "description": "Optional kaspad RPC host. Defaults to KASPA_NODE_RPC_HOST, then 127.0.0.1.",
+}
+
+_PORT_SCHEMA = {
+    "type": "integer",
+    "description": "Optional kaspad RPC TCP port. Defaults to KASPA_NODE_RPC_PORT, then 16110.",
+    "minimum": 1,
+    "maximum": 65535,
 }
 
 _LIMIT_SCHEMA = {
@@ -569,6 +623,26 @@ registry.register(
     },
     handler=kasia_indexer_health,
     description="Read-only Kasia indexer metrics check",
+)
+
+registry.register(
+    name="kaspa_node_rpc_tcp_health",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_node_rpc_tcp_health",
+        "description": "Read-only TCP reachability check for a kaspad RPC endpoint. Does not issue an RPC request.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "host": _HOST_SCHEMA,
+                "port": _PORT_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_node_rpc_tcp_health,
+    description="Read-only kaspad RPC TCP reachability check",
 )
 
 _register_kaspa_address_tool(

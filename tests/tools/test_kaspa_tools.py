@@ -1,4 +1,5 @@
 import json
+import socket
 from urllib import error
 
 import pytest
@@ -61,6 +62,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_name",
         "kaspa_address_utxo_count",
         "kaspa_api_health",
+        "kaspa_node_rpc_tcp_health",
         "kns_domain_owner",
         "kns_primary_name",
         "kns_search_assets",
@@ -73,9 +75,60 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_name" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_utxo_count" not in _HERMES_CORE_TOOLS
+    assert "kaspa_node_rpc_tcp_health" not in _HERMES_CORE_TOOLS
     assert "kns_search_assets" not in _HERMES_CORE_TOOLS
     assert "kns_domain_owner" not in _HERMES_CORE_TOOLS
     assert "kns_primary_name" not in _HERMES_CORE_TOOLS
+
+
+def test_node_rpc_tcp_health_uses_default_grpc_host_port(monkeypatch):
+    seen = {}
+
+    class FakeSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_create_connection(address, timeout):
+        seen["address"] = address
+        seen["timeout"] = timeout
+        return FakeSocket()
+
+    monkeypatch.delenv("KASPA_NODE_RPC_HOST", raising=False)
+    monkeypatch.delenv("KASPA_NODE_RPC_PORT", raising=False)
+    monkeypatch.setattr(kaspa_tools.socket, "create_connection", fake_create_connection)
+
+    result = _json(kaspa_tools.kaspa_node_rpc_tcp_health({}))
+
+    assert result == {
+        "ok": True,
+        "host": "127.0.0.1",
+        "port": 16110,
+        "protocol_hint": "kaspad gRPC/wRPC TCP endpoint; this check verifies reachability only",
+        "timeout_seconds": 10,
+    }
+    assert seen == {"address": ("127.0.0.1", 16110), "timeout": 10}
+
+
+def test_node_rpc_tcp_health_reports_connection_error(monkeypatch):
+    def fake_create_connection(address, timeout):
+        raise socket.timeout("timed out")
+
+    monkeypatch.setattr(kaspa_tools.socket, "create_connection", fake_create_connection)
+
+    result = _json(kaspa_tools.kaspa_node_rpc_tcp_health({
+        "host": "10.0.4.30",
+        "port": 16110,
+        "timeout_seconds": 2,
+    }))
+
+    assert result["ok"] is False
+    assert result["host"] == "10.0.4.30"
+    assert result["port"] == 16110
+    assert result["timeout_seconds"] == 2
+    assert "timed out" in result["error"]
 
 
 def test_default_url_behavior_with_env_cleared(monkeypatch):
