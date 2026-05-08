@@ -284,6 +284,17 @@ def kaspa_api_health(args: dict, **kwargs) -> str:
     )
 
 
+def kaspa_network_info(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa network metadata from the REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        result = _get_json(base_url, "/info/network", args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "network")
+
+
 def kasia_indexer_health(args: dict, **kwargs) -> str:
     """Check the public/read-only Kasia indexer metrics endpoint."""
     return _health_tool(
@@ -739,6 +750,25 @@ registry.register(
     },
     handler=kaspa_api_health,
     description="Read-only Kaspa API health check",
+)
+
+registry.register(
+    name="kaspa_network_info",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_network_info",
+        "description": "Read-only Kaspa REST /info/network metadata lookup.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_network_info,
+    description="Read-only Kaspa network metadata lookup",
 )
 
 registry.register(

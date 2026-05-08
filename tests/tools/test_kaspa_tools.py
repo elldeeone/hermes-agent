@@ -74,6 +74,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_name",
         "kaspa_address_utxo_count",
         "kaspa_api_health",
+        "kaspa_network_info",
         "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
         "kaspa_transaction_lookup",
@@ -85,6 +86,7 @@ def test_toolset_resolves_kaspa_tools():
 
 def test_tools_are_not_in_core_tools():
     assert "kaspa_api_health" not in _HERMES_CORE_TOOLS
+    assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_name" not in _HERMES_CORE_TOOLS
@@ -117,6 +119,31 @@ def test_node_info_defaults_to_wrpc_websocket_port(monkeypatch):
     assert result["port"] == 17110
     assert result["endpoint"] == "ws://127.0.0.1:17110"
     assert seen["input"]["url"] == "ws://127.0.0.1:17110"
+
+
+def test_kaspa_network_info_fetches_network(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"networkName":"mainnet","serverVersion":"1.0.0"}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_network_info({
+        "url": "https://api.example",
+        "timeout_seconds": 3,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/info/network",
+        "status_code": 200,
+        "network": {"networkName": "mainnet", "serverVersion": "1.0.0"},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 3}
 
 
 def test_node_info_invokes_readonly_probe_and_returns_normalized_payload(monkeypatch):
