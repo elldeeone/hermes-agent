@@ -78,12 +78,18 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_api_health",
         "kaspa_block_lookup",
         "kaspa_blockdag_info",
+        "kaspa_blockreward",
         "kaspa_coin_supply",
         "kaspa_fee_estimate",
+        "kaspa_halving_info",
+        "kaspa_hashrate",
+        "kaspa_marketcap",
         "kaspa_network_info",
         "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
+        "kaspa_price",
         "kaspa_transaction_lookup",
+        "kaspa_virtual_chain_blue_score",
         "kns_domain_owner",
         "kns_primary_name",
         "kns_search_assets",
@@ -94,9 +100,15 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_api_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_block_lookup" not in _HERMES_CORE_TOOLS
     assert "kaspa_blockdag_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_blockreward" not in _HERMES_CORE_TOOLS
     assert "kaspa_coin_supply" not in _HERMES_CORE_TOOLS
     assert "kaspa_fee_estimate" not in _HERMES_CORE_TOOLS
+    assert "kaspa_hashrate" not in _HERMES_CORE_TOOLS
+    assert "kaspa_halving_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_marketcap" not in _HERMES_CORE_TOOLS
     assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_price" not in _HERMES_CORE_TOOLS
+    assert "kaspa_virtual_chain_blue_score" not in _HERMES_CORE_TOOLS
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_name" not in _HERMES_CORE_TOOLS
@@ -231,6 +243,42 @@ def test_kaspa_fee_estimate_fetches_fee_estimate(monkeypatch):
         "fee_estimate": {"priorityBucket": {"feerate": 1.0}},
     }
     assert seen == {"url": result["endpoint"], "timeout": 6}
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "path", "payload_key", "body", "payload"),
+    [
+        ("kaspa_price", "/info/price", "price", b'{"price":0.12}', {"price": 0.12}),
+        ("kaspa_marketcap", "/info/marketcap", "marketcap", b'{"marketCap":3000000000}', {"marketCap": 3000000000}),
+        ("kaspa_hashrate", "/info/hashrate", "hashrate", b'{"hashrate":123456}', {"hashrate": 123456}),
+        ("kaspa_blockreward", "/info/blockreward", "blockreward", b'{"blockreward":103.5}', {"blockreward": 103.5}),
+        ("kaspa_halving_info", "/info/halving", "halving", b'{"nextHalvingTimestamp":123456789}', {"nextHalvingTimestamp": 123456789}),
+        ("kaspa_virtual_chain_blue_score", "/info/virtual-chain-blue-score", "blue_score", b'{"blueScore":12345}', {"blueScore": 12345}),
+    ],
+)
+def test_kaspa_readonly_info_scalar_tools_fetch_payloads(monkeypatch, tool_name, path, payload_key, body, payload):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, body)
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(getattr(kaspa_tools, tool_name)({
+        "url": "https://api.example/",
+        "timeout_seconds": 8,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": f"https://api.example{path}",
+        "status_code": 200,
+        payload_key: payload,
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 8}
 
 
 def test_node_info_invokes_readonly_probe_and_returns_normalized_payload(monkeypatch):

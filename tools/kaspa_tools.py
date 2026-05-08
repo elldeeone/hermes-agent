@@ -328,6 +328,46 @@ def kaspa_fee_estimate(args: dict, **kwargs) -> str:
     return _successful_json_result(result, "fee_estimate")
 
 
+def _kaspa_info_tool(args: dict, *, path: str, payload_key: str) -> str:
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        result = _get_json(base_url, path, args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, payload_key)
+
+
+def kaspa_price(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa USD price metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/price", payload_key="price")
+
+
+def kaspa_marketcap(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa market-cap metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/marketcap", payload_key="marketcap")
+
+
+def kaspa_hashrate(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa hashrate metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/hashrate", payload_key="hashrate")
+
+
+def kaspa_blockreward(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa block reward metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/blockreward", payload_key="blockreward")
+
+
+def kaspa_halving_info(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa halving metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/halving", payload_key="halving")
+
+
+def kaspa_virtual_chain_blue_score(args: dict, **kwargs) -> str:
+    """Fetch read-only Kaspa virtual-chain blue-score metadata from the REST API."""
+    return _kaspa_info_tool(args, path="/info/virtual-chain-blue-score", payload_key="blue_score")
+
+
 def kasia_indexer_health(args: dict, **kwargs) -> str:
     """Check the public/read-only Kasia indexer metrics endpoint."""
     return _health_tool(
@@ -921,6 +961,70 @@ registry.register(
     },
     handler=kaspa_fee_estimate,
     description="Read-only Kaspa fee estimate lookup",
+)
+
+
+def _register_kaspa_info_tool(*, name: str, handler, endpoint: str, description: str) -> None:
+    registry.register(
+        name=name,
+        toolset="kaspa",
+        schema={
+            "name": name,
+            "description": f"Read-only Kaspa REST {endpoint} lookup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": _URL_SCHEMA,
+                    "timeout_seconds": _TIMEOUT_SCHEMA,
+                },
+                "additionalProperties": False,
+            },
+        },
+        handler=handler,
+        description=description,
+    )
+
+
+_register_kaspa_info_tool(
+    name="kaspa_price",
+    handler=kaspa_price,
+    endpoint="/info/price",
+    description="Read-only Kaspa price lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_marketcap",
+    handler=kaspa_marketcap,
+    endpoint="/info/marketcap",
+    description="Read-only Kaspa market-cap lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_hashrate",
+    handler=kaspa_hashrate,
+    endpoint="/info/hashrate",
+    description="Read-only Kaspa hashrate lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_blockreward",
+    handler=kaspa_blockreward,
+    endpoint="/info/blockreward",
+    description="Read-only Kaspa block reward lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_halving_info",
+    handler=kaspa_halving_info,
+    endpoint="/info/halving",
+    description="Read-only Kaspa halving lookup",
+)
+
+_register_kaspa_info_tool(
+    name="kaspa_virtual_chain_blue_score",
+    handler=kaspa_virtual_chain_blue_score,
+    endpoint="/info/virtual-chain-blue-score",
+    description="Read-only Kaspa virtual-chain blue score lookup",
 )
 
 registry.register(
