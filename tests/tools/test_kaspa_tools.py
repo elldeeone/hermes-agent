@@ -76,6 +76,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_api_health",
         "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
+        "kaspa_transaction_lookup",
         "kns_domain_owner",
         "kns_primary_name",
         "kns_search_assets",
@@ -90,6 +91,7 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_address_utxo_count" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_rpc_tcp_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_info" not in _HERMES_CORE_TOOLS
+    assert "kaspa_transaction_lookup" not in _HERMES_CORE_TOOLS
     assert "kns_search_assets" not in _HERMES_CORE_TOOLS
     assert "kns_domain_owner" not in _HERMES_CORE_TOOLS
     assert "kns_primary_name" not in _HERMES_CORE_TOOLS
@@ -490,6 +492,39 @@ def test_kasia_indexer_self_stash_by_owner_uses_scope_and_owner(monkeypatch):
     assert result["ok"] is True
     assert result["items"] == {"stash": []}
     assert seen["url"] == "http://indexer.example/self-stash/by-owner?scope=00&owner=kaspa%3Aqowner"
+
+
+def test_kaspa_transaction_lookup_fetches_transaction(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"transaction_id":"abc123","block_hash":["def456"]}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_transaction_lookup({
+        "url": "https://api.example",
+        "transaction_id": "abc123",
+        "timeout_seconds": 4,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/transactions/abc123",
+        "status_code": 200,
+        "transaction": {"transaction_id": "abc123", "block_hash": ["def456"]},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 4}
+
+
+def test_kaspa_transaction_lookup_rejects_missing_transaction_id():
+    result = _json(kaspa_tools.kaspa_transaction_lookup({"url": "https://api.example"}))
+
+    assert result["ok"] is False
+    assert "transaction_id is required" in result["error"]
 
 
 def test_kaspa_address_balance_fetches_balance(monkeypatch):
