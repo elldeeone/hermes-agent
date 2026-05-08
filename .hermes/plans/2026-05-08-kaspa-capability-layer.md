@@ -118,6 +118,7 @@ Completed on branch `spike/kaspa-node-rpc-readonly`:
 - Added `kaspa_price`, `kaspa_marketcap`, `kaspa_hashrate`, `kaspa_max_hashrate`, `kaspa_hashrate_history`, `kaspa_kaspad_info`, `kaspa_blockreward`, `kaspa_halving_info`, and `kaspa_virtual_chain_blue_score` for read-only REST market/network/kaspad scalar and history metadata.
 - Added `kaspa_circulating_coin_supply` and `kaspa_total_coin_supply` for read-only REST coin-supply scalar metadata.
 - Added `kaspa_block_lookup` for REST `/blocks/{blockId}` block lookup.
+- Added `kaspa_blocks` and `kaspa_blocks_from_bluescore` for read-only REST block-list lookups.
 - Added `kaspa_transaction_lookup` for REST `/transactions/{transaction_id}` transaction lookup.
 - Added `kaspa_address_transaction_count` for REST `/addresses/{kaspaAddress}/transactions-count` address activity counts.
 - Added `kaspa_address_transactions` for limited REST `/addresses/{kaspaAddress}/full-transactions-page` address transaction pages.
@@ -126,7 +127,7 @@ Completed on branch `spike/kaspa-node-rpc-readonly`:
 - Added `kaspa_node_info` as a read-only node metadata boundary that shells out to a local probe/facade command.
 - Bundled optional Node probe at `scripts/kaspa-node-probe/node-info.mjs` using `kaspa-wasm` over wRPC WebSocket.
 - Kept wallet/seed/signing/broadcast out of scope.
-- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes with 66 tests.
+- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes with 69 tests.
 - Probe verification: `node --check scripts/kaspa-node-probe/node-info.mjs` and `npm --prefix scripts/kaspa-node-probe audit --audit-level=high` pass.
 - Full `python -m pytest tests/ -o 'addopts=' -q` did not complete within 600s and showed broad unrelated failures before timeout; do not treat that as a clean full-suite pass.
 

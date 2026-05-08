@@ -257,6 +257,8 @@ TOOLSETS = {
             "kaspa_address_utxo_count",
             "kaspa_address_utxos",
             "kaspa_block_lookup",
+            "kaspa_blocks",
+            "kaspa_blocks_from_bluescore",
             "kaspa_hashrate",
             "kaspa_hashrate_history",
             "kaspa_halving_info",

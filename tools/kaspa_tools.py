@@ -188,6 +188,20 @@ def _optional_string(args: dict, name: str) -> str | None:
     return text or None
 
 
+def _optional_bool(args: dict, name: str) -> bool | None:
+    value = args.get(name)
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
 def _successful_json_result(result: dict[str, Any], payload_key: str) -> str:
     status_code = result["status_code"]
     if not 200 <= status_code < 300:
@@ -567,6 +581,48 @@ def kaspa_block_lookup(args: dict, **kwargs) -> str:
     return _successful_json_result(result, "block")
 
 
+def kaspa_blocks(args: dict, **kwargs) -> str:
+    """Fetch read-only blocks from the Kaspa REST API by low hash."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        query: dict[str, Any] = {"lowHash": _required_string(args, "low_hash")}
+        include_blocks = _optional_bool(args, "include_blocks")
+        include_transactions = _optional_bool(args, "include_transactions")
+        if include_blocks is not None:
+            query["includeBlocks"] = str(include_blocks).lower()
+        if include_transactions is not None:
+            query["includeTransactions"] = str(include_transactions).lower()
+        result = _get_json(base_url, "/blocks", args.get("timeout_seconds"), query=query)
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "blocks")
+
+
+def kaspa_blocks_from_bluescore(args: dict, **kwargs) -> str:
+    """Fetch read-only blocks from the Kaspa REST API by blue-score range."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        query: dict[str, Any] = {}
+        blue_score = _optional_non_negative_int(args, "blue_score")
+        blue_score_gte = _optional_non_negative_int(args, "blue_score_gte")
+        blue_score_lt = _optional_non_negative_int(args, "blue_score_lt")
+        include_transactions = _optional_bool(args, "include_transactions")
+        if blue_score is not None:
+            query["blueScore"] = blue_score
+        if blue_score_gte is not None:
+            query["blueScoreGte"] = blue_score_gte
+        if blue_score_lt is not None:
+            query["blueScoreLt"] = blue_score_lt
+        if include_transactions is not None:
+            query["includeTransactions"] = str(include_transactions).lower()
+        result = _get_json(base_url, "/blocks-from-bluescore", args.get("timeout_seconds"), query=query)
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "blocks")
+
+
 def kaspa_address_balance(args: dict, **kwargs) -> str:
     """Fetch the read-only balance payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="balance", payload_key="balance")
@@ -794,6 +850,27 @@ _TRANSACTION_ID_SCHEMA = {
 _BLOCK_ID_SCHEMA = {
     "type": "string",
     "description": "Kaspa block hash/id to query.",
+}
+
+_LOW_HASH_SCHEMA = {
+    "type": "string",
+    "description": "Kaspa low block hash cursor used by the REST /blocks endpoint.",
+}
+
+_BLUE_SCORE_SCHEMA = {
+    "type": "integer",
+    "description": "Optional Kaspa blue-score cursor or bound.",
+    "minimum": 0,
+}
+
+_INCLUDE_BLOCKS_SCHEMA = {
+    "type": "boolean",
+    "description": "Optional flag to include full block payloads where supported by the Kaspa REST API.",
+}
+
+_INCLUDE_TRANSACTIONS_SCHEMA = {
+    "type": "boolean",
+    "description": "Optional flag to include transaction payloads where supported by the Kaspa REST API.",
 }
 
 _ALIAS_SCHEMA = {
@@ -1266,6 +1343,52 @@ registry.register(
     },
     handler=kaspa_block_lookup,
     description="Read-only Kaspa block lookup",
+)
+
+registry.register(
+    name="kaspa_blocks",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_blocks",
+        "description": "Read-only block page lookup using the Kaspa REST /blocks endpoint.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "low_hash": _LOW_HASH_SCHEMA,
+                "include_blocks": _INCLUDE_BLOCKS_SCHEMA,
+                "include_transactions": _INCLUDE_TRANSACTIONS_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "required": ["low_hash"],
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_blocks,
+    description="Read-only Kaspa block page lookup",
+)
+
+registry.register(
+    name="kaspa_blocks_from_bluescore",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_blocks_from_bluescore",
+        "description": "Read-only block lookup using the Kaspa REST /blocks-from-bluescore endpoint.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "blue_score": _BLUE_SCORE_SCHEMA,
+                "blue_score_gte": _BLUE_SCORE_SCHEMA,
+                "blue_score_lt": _BLUE_SCORE_SCHEMA,
+                "include_transactions": _INCLUDE_TRANSACTIONS_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_blocks_from_bluescore,
+    description="Read-only Kaspa blocks-from-bluescore lookup",
 )
 
 registry.register(

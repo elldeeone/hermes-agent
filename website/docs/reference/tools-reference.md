@@ -148,6 +148,8 @@ Backend split:
 | `kaspa_address_utxo_count` | Read-only UTXO count lookup for a Kaspa address. | — |
 | `kaspa_address_utxos` | Read-only open UTXO lookup for a Kaspa address using `/addresses/{kaspaAddress}/utxos`. | — |
 | `kaspa_block_lookup` | Read-only block lookup by block hash/id using the Kaspa REST `/blocks/{blockId}` endpoint. | — |
+| `kaspa_blocks` | Read-only block page lookup using the Kaspa REST `/blocks` endpoint with required `low_hash` and optional include flags. | — |
+| `kaspa_blocks_from_bluescore` | Read-only block lookup using the Kaspa REST `/blocks-from-bluescore` endpoint with optional blue-score range and transaction include flag. | — |
 | `kaspa_transaction_lookup` | Read-only transaction lookup by transaction id using the Kaspa REST `/transactions/{transaction_id}` endpoint. | — |
 | `kns_domain_owner` | Read-only owner lookup for a KNS domain such as `example.kas`. | — |
 | `kns_primary_name` | Read-only primary KNS name lookup for a Kaspa address. | — |

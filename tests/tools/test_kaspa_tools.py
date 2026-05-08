@@ -80,6 +80,8 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_block_lookup",
         "kaspa_blockdag_info",
         "kaspa_blockreward",
+        "kaspa_blocks",
+        "kaspa_blocks_from_bluescore",
         "kaspa_circulating_coin_supply",
         "kaspa_coin_supply",
         "kaspa_fee_estimate",
@@ -107,6 +109,8 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_block_lookup" not in _HERMES_CORE_TOOLS
     assert "kaspa_blockdag_info" not in _HERMES_CORE_TOOLS
     assert "kaspa_blockreward" not in _HERMES_CORE_TOOLS
+    assert "kaspa_blocks" not in _HERMES_CORE_TOOLS
+    assert "kaspa_blocks_from_bluescore" not in _HERMES_CORE_TOOLS
     assert "kaspa_circulating_coin_supply" not in _HERMES_CORE_TOOLS
     assert "kaspa_coin_supply" not in _HERMES_CORE_TOOLS
     assert "kaspa_fee_estimate" not in _HERMES_CORE_TOOLS
@@ -748,6 +752,62 @@ def test_kaspa_block_lookup_rejects_missing_block_id():
 
     assert result["ok"] is False
     assert "block_id is required" in result["error"]
+
+
+def test_kaspa_blocks_fetches_blocks_from_low_hash(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'[{"hash":"abc"}]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_blocks({
+        "url": "https://api.example",
+        "low_hash": "00aa",
+        "include_blocks": True,
+        "include_transactions": False,
+        "timeout_seconds": 5,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/blocks?lowHash=00aa&includeBlocks=true&includeTransactions=false",
+        "status_code": 200,
+        "blocks": [{"hash": "abc"}],
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 5}
+
+
+def test_kaspa_blocks_requires_low_hash():
+    result = _json(kaspa_tools.kaspa_blocks({"url": "https://api.example"}))
+
+    assert result["ok"] is False
+    assert "low_hash is required" in result["error"]
+
+
+def test_kaspa_blocks_from_bluescore_encodes_range(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        return FakeResponse(200, b'[{"blueScore":42}]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_blocks_from_bluescore({
+        "url": "https://api.example",
+        "blue_score_gte": 40,
+        "blue_score_lt": 50,
+        "include_transactions": True,
+    }))
+
+    assert result["ok"] is True
+    assert result["endpoint"] == "https://api.example/blocks-from-bluescore?blueScoreGte=40&blueScoreLt=50&includeTransactions=true"
+    assert result["blocks"] == [{"blueScore": 42}]
 
 
 def test_kaspa_transaction_lookup_fetches_transaction(monkeypatch):
