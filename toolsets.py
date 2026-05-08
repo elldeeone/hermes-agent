@@ -248,6 +248,7 @@ TOOLSETS = {
             "kaspa_address_balance",
             "kaspa_address_name",
             "kaspa_address_utxo_count",
+            "kaspa_block_lookup",
             "kaspa_transaction_lookup",
             "kns_domain_owner",
             "kns_primary_name",

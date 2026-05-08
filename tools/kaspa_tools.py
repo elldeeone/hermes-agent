@@ -445,6 +445,18 @@ def kaspa_transaction_lookup(args: dict, **kwargs) -> str:
     return _successful_json_result(result, "transaction")
 
 
+def kaspa_block_lookup(args: dict, **kwargs) -> str:
+    """Fetch a read-only block payload by block hash/id from the Kaspa REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        block_id = quote(_required_string(args, "block_id"), safe="")
+        result = _get_json(base_url, f"/blocks/{block_id}", args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "block")
+
+
 def kaspa_address_balance(args: dict, **kwargs) -> str:
     """Fetch the read-only balance payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="balance", payload_key="balance")
@@ -607,6 +619,11 @@ _KASPA_ADDRESS_SCHEMA = {
 _TRANSACTION_ID_SCHEMA = {
     "type": "string",
     "description": "Kaspa transaction id to query.",
+}
+
+_BLOCK_ID_SCHEMA = {
+    "type": "string",
+    "description": "Kaspa block hash/id to query.",
 }
 
 _ALIAS_SCHEMA = {
@@ -852,6 +869,27 @@ _register_kaspa_address_tool(
     name="kaspa_address_utxo_count",
     handler=kaspa_address_utxo_count,
     description="Read-only UTXO count lookup for a Kaspa address.",
+)
+
+registry.register(
+    name="kaspa_block_lookup",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_block_lookup",
+        "description": "Read-only block lookup by block hash/id using the Kaspa REST API.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "block_id": _BLOCK_ID_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "required": ["block_id"],
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_block_lookup,
+    description="Read-only Kaspa block lookup",
 )
 
 registry.register(

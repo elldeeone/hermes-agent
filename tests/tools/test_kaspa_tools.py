@@ -74,6 +74,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_name",
         "kaspa_address_utxo_count",
         "kaspa_api_health",
+        "kaspa_block_lookup",
         "kaspa_network_info",
         "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
@@ -86,6 +87,7 @@ def test_toolset_resolves_kaspa_tools():
 
 def test_tools_are_not_in_core_tools():
     assert "kaspa_api_health" not in _HERMES_CORE_TOOLS
+    assert "kaspa_block_lookup" not in _HERMES_CORE_TOOLS
     assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
@@ -519,6 +521,39 @@ def test_kasia_indexer_self_stash_by_owner_uses_scope_and_owner(monkeypatch):
     assert result["ok"] is True
     assert result["items"] == {"stash": []}
     assert seen["url"] == "http://indexer.example/self-stash/by-owner?scope=00&owner=kaspa%3Aqowner"
+
+
+def test_kaspa_block_lookup_fetches_block(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'{"hash":"abc123","blueScore":42}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_block_lookup({
+        "url": "https://api.example",
+        "block_id": "abc123",
+        "timeout_seconds": 4,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/blocks/abc123",
+        "status_code": 200,
+        "block": {"hash": "abc123", "blueScore": 42},
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 4}
+
+
+def test_kaspa_block_lookup_rejects_missing_block_id():
+    result = _json(kaspa_tools.kaspa_block_lookup({"url": "https://api.example"}))
+
+    assert result["ok"] is False
+    assert "block_id is required" in result["error"]
 
 
 def test_kaspa_transaction_lookup_fetches_transaction(monkeypatch):

@@ -130,6 +130,7 @@ Backend split:
 | `kaspa_address_balance` | Read-only balance lookup for a Kaspa address. | — |
 | `kaspa_address_name` | Read-only known-name lookup for a Kaspa address. | — |
 | `kaspa_address_utxo_count` | Read-only UTXO count lookup for a Kaspa address. | — |
+| `kaspa_block_lookup` | Read-only block lookup by block hash/id using the Kaspa REST `/blocks/{blockId}` endpoint. | — |
 | `kaspa_transaction_lookup` | Read-only transaction lookup by transaction id using the Kaspa REST `/transactions/{transaction_id}` endpoint. | — |
 | `kns_domain_owner` | Read-only owner lookup for a KNS domain such as `example.kas`. | — |
 | `kns_primary_name` | Read-only primary KNS name lookup for a Kaspa address. | — |
