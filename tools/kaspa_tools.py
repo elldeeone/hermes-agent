@@ -180,6 +180,13 @@ def _optional_non_negative_int(args: dict, name: str, *, max_value: int | None =
     return number
 
 
+def _required_non_negative_int(args: dict, name: str, *, max_value: int | None = None) -> int:
+    number = _optional_non_negative_int(args, name, max_value=max_value)
+    if number is None:
+        raise ValueError(f"{name} is required")
+    return number
+
+
 def _optional_string(args: dict, name: str) -> str | None:
     value = args.get(name)
     if value is None:
@@ -623,6 +630,46 @@ def kaspa_blocks_from_bluescore(args: dict, **kwargs) -> str:
     return _successful_json_result(result, "blocks")
 
 
+def kaspa_transaction_count(args: dict, **kwargs) -> str:
+    """Fetch read-only accepted transaction count metadata from the Kaspa REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        day_or_month = _optional_string(args, "day_or_month")
+        path = "/transactions/count/"
+        if day_or_month:
+            path = f"{path}{quote(day_or_month, safe='')}"
+        result = _get_json(base_url, path, args.get("timeout_seconds"))
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "transaction_count")
+
+
+def kaspa_virtual_chain(args: dict, **kwargs) -> str:
+    """Fetch read-only virtual-chain transactions by blue score from the Kaspa REST API."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        limit = _optional_non_negative_int(args, "limit", max_value=100)
+        if limit is None:
+            limit = 10
+        else:
+            limit = 100 if limit > 10 else 10
+        blue_score_gte = _required_non_negative_int(args, "blue_score_gte")
+        blue_score_gte = blue_score_gte - (blue_score_gte % limit)
+        query: dict[str, Any] = {"blueScoreGte": blue_score_gte, "limit": limit}
+        resolve_inputs = _optional_bool(args, "resolve_inputs")
+        include_coinbase = _optional_bool(args, "include_coinbase")
+        if resolve_inputs is not None:
+            query["resolveInputs"] = str(resolve_inputs).lower()
+        if include_coinbase is not None:
+            query["includeCoinbase"] = str(include_coinbase).lower()
+        result = _get_json(base_url, "/virtual-chain", args.get("timeout_seconds"), query=query)
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "virtual_chain")
+
+
 def kaspa_address_balance(args: dict, **kwargs) -> str:
     """Fetch the read-only balance payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="balance", payload_key="balance")
@@ -871,6 +918,17 @@ _INCLUDE_BLOCKS_SCHEMA = {
 _INCLUDE_TRANSACTIONS_SCHEMA = {
     "type": "boolean",
     "description": "Optional flag to include transaction payloads where supported by the Kaspa REST API.",
+}
+
+_VIRTUAL_CHAIN_LIMIT_SCHEMA = {
+    "type": "integer",
+    "description": "Optional virtual-chain result limit. Clamped to the REST API's safe enum values: 10 or 100.",
+    "enum": [10, 100],
+}
+
+_RESOLVE_INPUTS_SCHEMA = {
+    "type": "boolean",
+    "description": "Optional flag to resolve transaction inputs in virtual-chain reads.",
 }
 
 _ALIAS_SCHEMA = {
@@ -1410,6 +1468,50 @@ registry.register(
     },
     handler=kaspa_transaction_lookup,
     description="Read-only Kaspa transaction lookup",
+)
+
+registry.register(
+    name="kaspa_transaction_count",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_transaction_count",
+        "description": "Read-only accepted transaction count lookup, optionally for a UTC day or month.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "day_or_month": _DAY_OR_MONTH_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_transaction_count,
+    description="Read-only Kaspa accepted transaction count lookup",
+)
+
+registry.register(
+    name="kaspa_virtual_chain",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_virtual_chain",
+        "description": "Read-only virtual-chain transaction lookup by blue-score cursor using the Kaspa REST API.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "blue_score_gte": _BLUE_SCORE_SCHEMA,
+                "limit": _VIRTUAL_CHAIN_LIMIT_SCHEMA,
+                "resolve_inputs": _RESOLVE_INPUTS_SCHEMA,
+                "include_coinbase": {"type": "boolean", "description": "Optional flag to include coinbase transactions."},
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "required": ["blue_score_gte"],
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_virtual_chain,
+    description="Read-only Kaspa virtual-chain transaction lookup",
 )
 
 registry.register(

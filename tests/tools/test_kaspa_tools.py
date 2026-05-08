@@ -96,7 +96,9 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_node_rpc_tcp_health",
         "kaspa_price",
         "kaspa_total_coin_supply",
+        "kaspa_transaction_count",
         "kaspa_transaction_lookup",
+        "kaspa_virtual_chain",
         "kaspa_virtual_chain_blue_score",
         "kns_domain_owner",
         "kns_primary_name",
@@ -123,6 +125,8 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_network_info" not in _HERMES_CORE_TOOLS
     assert "kaspa_price" not in _HERMES_CORE_TOOLS
     assert "kaspa_total_coin_supply" not in _HERMES_CORE_TOOLS
+    assert "kaspa_transaction_count" not in _HERMES_CORE_TOOLS
+    assert "kaspa_virtual_chain" not in _HERMES_CORE_TOOLS
     assert "kaspa_virtual_chain_blue_score" not in _HERMES_CORE_TOOLS
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
@@ -808,6 +812,101 @@ def test_kaspa_blocks_from_bluescore_encodes_range(monkeypatch):
     assert result["ok"] is True
     assert result["endpoint"] == "https://api.example/blocks-from-bluescore?blueScoreGte=40&blueScoreLt=50&includeTransactions=true"
     assert result["blocks"] == [{"blueScore": 42}]
+
+
+def test_kaspa_transaction_count_fetches_total(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        return FakeResponse(200, b'{"transactionsCount":12345}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_transaction_count({"url": "https://api.example"}))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/transactions/count/",
+        "status_code": 200,
+        "transaction_count": {"transactionsCount": 12345},
+    }
+    assert seen["url"] == result["endpoint"]
+
+
+def test_kaspa_transaction_count_fetches_day_or_month(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        return FakeResponse(200, b'{"transactionsCount":99}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_transaction_count({
+        "url": "https://api.example",
+        "day_or_month": "2026-05-08",
+    }))
+
+    assert result["ok"] is True
+    assert result["endpoint"] == "https://api.example/transactions/count/2026-05-08"
+    assert result["transaction_count"] == {"transactionsCount": 99}
+
+
+def test_kaspa_virtual_chain_encodes_bounded_query(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'[{"transactionId":"tx1"}]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_virtual_chain({
+        "url": "https://api.example",
+        "blue_score_gte": 100,
+        "limit": 100,
+        "resolve_inputs": True,
+        "include_coinbase": False,
+        "timeout_seconds": 6,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/virtual-chain?blueScoreGte=100&limit=100&resolveInputs=true&includeCoinbase=false",
+        "status_code": 200,
+        "virtual_chain": [{"transactionId": "tx1"}],
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 6}
+
+
+def test_kaspa_virtual_chain_rounds_blue_score_to_limit_boundary(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        return FakeResponse(200, b'[]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_virtual_chain({
+        "url": "https://api.example",
+        "blue_score_gte": 105,
+        "limit": 10,
+    }))
+
+    assert result["ok"] is True
+    assert seen["url"] == "https://api.example/virtual-chain?blueScoreGte=100&limit=10"
+
+
+def test_kaspa_virtual_chain_requires_blue_score_gte():
+    result = _json(kaspa_tools.kaspa_virtual_chain({"url": "https://api.example"}))
+
+    assert result["ok"] is False
+    assert "blue_score_gte is required" in result["error"]
 
 
 def test_kaspa_transaction_lookup_fetches_transaction(monkeypatch):

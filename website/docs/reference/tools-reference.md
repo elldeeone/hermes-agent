@@ -6,9 +6,9 @@ description: "Authoritative reference for Hermes built-in tools, grouped by tool
 
 # Built-in Tools Reference
 
-This page documents all 83 built-in tools in the Hermes tool registry, grouped by toolset. Availability varies by platform, credentials, and enabled toolsets.
+This page documents all 85 built-in tools in the Hermes tool registry, grouped by toolset. Availability varies by platform, credentials, and enabled toolsets.
 
-**Quick counts:** 10 browser tools (core) + 2 browser-cdp tools, 4 file tools, 10 RL tools, 4 Home Assistant tools, 15 Kaspa/Kasia tools, 2 terminal tools, 2 web tools, 5 Feishu tools, 7 Spotify tools, 5 Yuanbao tools, 2 Discord tools, and 15 standalone tools across other toolsets.
+**Quick counts:** 10 browser tools (core) + 2 browser-cdp tools, 4 file tools, 10 RL tools, 4 Home Assistant tools, 17 Kaspa/Kasia tools, 2 terminal tools, 2 web tools, 5 Feishu tools, 7 Spotify tools, 5 Yuanbao tools, 2 Discord tools, and 15 standalone tools across other toolsets.
 
 :::tip MCP Tools
 In addition to built-in tools, Hermes can load tools dynamically from MCP servers. MCP tools appear with a server-name prefix (e.g., `github_create_issue` for the `github` MCP server). See [MCP Integration](/docs/user-guide/features/mcp) for configuration.
@@ -151,6 +151,8 @@ Backend split:
 | `kaspa_blocks` | Read-only block page lookup using the Kaspa REST `/blocks` endpoint with required `low_hash` and optional include flags. | — |
 | `kaspa_blocks_from_bluescore` | Read-only block lookup using the Kaspa REST `/blocks-from-bluescore` endpoint with optional blue-score range and transaction include flag. | — |
 | `kaspa_transaction_lookup` | Read-only transaction lookup by transaction id using the Kaspa REST `/transactions/{transaction_id}` endpoint. | — |
+| `kaspa_transaction_count` | Read-only accepted transaction-count lookup using `/transactions/count/`, optionally scoped to a UTC day or month. | — |
+| `kaspa_virtual_chain` | Read-only virtual-chain transaction lookup using `/virtual-chain` with required `blue_score_gte` and bounded optional `limit`, `resolve_inputs`, and `include_coinbase` filters. `blue_score_gte` is rounded down to the selected limit boundary to satisfy the REST API constraint. | — |
 | `kns_domain_owner` | Read-only owner lookup for a KNS domain such as `example.kas`. | — |
 | `kns_primary_name` | Read-only primary KNS name lookup for a Kaspa address. | — |
 | `kns_search_assets` | Read-only KNS asset/domain search with optional `asset`, `owner`, pagination, sort, collection, and type filters. | — |
