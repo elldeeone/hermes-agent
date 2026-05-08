@@ -111,11 +111,14 @@ Build capability in this order:
 Completed on branch `spike/kaspa-node-rpc-readonly`:
 
 - Added the `kaspa` toolset with read-only REST/indexer/KNS helpers.
+- Added `kaspa_network_info` for REST `/info/network` metadata.
+- Added `kaspa_block_lookup` for REST `/blocks/{blockId}` block lookup.
+- Added `kaspa_transaction_lookup` for REST `/transactions/{transaction_id}` transaction lookup.
 - Added `kaspa_node_rpc_tcp_health` for TCP reachability without RPC calls.
 - Added `kaspa_node_info` as a read-only node metadata boundary that shells out to a local probe/facade command.
 - Bundled optional Node probe at `scripts/kaspa-node-probe/node-info.mjs` using `kaspa-wasm` over wRPC WebSocket.
 - Kept wallet/seed/signing/broadcast out of scope.
-- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes.
+- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes with 48 tests.
 - Probe verification: `node --check scripts/kaspa-node-probe/node-info.mjs` and `npm --prefix scripts/kaspa-node-probe audit --audit-level=high` pass.
 - Full `python -m pytest tests/ -o 'addopts=' -q` did not complete within 600s and showed broad unrelated failures before timeout; do not treat that as a clean full-suite pass.
 
