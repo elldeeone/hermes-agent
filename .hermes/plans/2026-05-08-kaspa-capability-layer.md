@@ -33,8 +33,8 @@ Build capability in this order:
 - Local checkout: `/home/luke/repos/hermes-kaspa-capability`
 - Origin: `https://github.com/elldeeone/hermes-agent.git`
 - Upstream: `https://github.com/NousResearch/hermes-agent.git`
-- Working branch: `spike/kaspa-capability-layer-20260508`
-- Base: upstream `main` at `faa13e49f`
+- Working branch: `spike/kaspa-node-rpc-readonly`
+- Base: upstream `main` at `faa13e49f` originally; current branch has incremental read-only Kaspa commits on Luke's fork.
 
 ## Phase 1: Read-only spike
 
@@ -105,6 +105,24 @@ Build capability in this order:
 4. Commit.
 
 **Verify:** Focused tests pass with disposable `HERMES_HOME`.
+
+## Phase 1 progress log
+
+Completed on branch `spike/kaspa-node-rpc-readonly`:
+
+- Added the `kaspa` toolset with read-only REST/indexer/KNS helpers.
+- Added `kaspa_node_rpc_tcp_health` for TCP reachability without RPC calls.
+- Added `kaspa_node_info` as a read-only node metadata boundary that shells out to a local probe/facade command.
+- Bundled optional Node probe at `scripts/kaspa-node-probe/node-info.mjs` using `kaspa-wasm` over wRPC WebSocket.
+- Kept wallet/seed/signing/broadcast out of scope.
+- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes.
+- Probe verification: `node --check scripts/kaspa-node-probe/node-info.mjs` and `npm --prefix scripts/kaspa-node-probe audit --audit-level=high` pass.
+- Full `python -m pytest tests/ -o 'addopts=' -q` did not complete within 600s and showed broad unrelated failures before timeout; do not treat that as a clean full-suite pass.
+
+Observed local-node state:
+
+- No local `kaspad` process was listening on `127.0.0.1:{16110,17110,18110}` when checked from the isolated workspace.
+- The bundled `kaspa_node_info` probe expects wRPC WebSocket, defaulting to `17110`; a gRPC-only `16110` node needs an alternate facade command via `KASPA_NODE_INFO_PROBE_COMMAND` rather than adding gRPC dependencies directly to Hermes core.
 
 ## First implementation gate
 
