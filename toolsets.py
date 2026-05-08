@@ -250,6 +250,8 @@ TOOLSETS = {
             "kasia_indexer_self_stash_by_owner",
             "kaspa_address_balance",
             "kaspa_address_name",
+            "kaspa_address_transaction_count",
+            "kaspa_address_transactions",
             "kaspa_address_utxo_count",
             "kaspa_block_lookup",
             "kaspa_transaction_lookup",

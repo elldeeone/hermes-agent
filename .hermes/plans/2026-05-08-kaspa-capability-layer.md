@@ -117,11 +117,13 @@ Completed on branch `spike/kaspa-node-rpc-readonly`:
 - Added `kaspa_fee_estimate` for REST `/info/fee-estimate` fee buckets.
 - Added `kaspa_block_lookup` for REST `/blocks/{blockId}` block lookup.
 - Added `kaspa_transaction_lookup` for REST `/transactions/{transaction_id}` transaction lookup.
+- Added `kaspa_address_transaction_count` for REST `/addresses/{kaspaAddress}/transactions-count` address activity counts.
+- Added `kaspa_address_transactions` for limited REST `/addresses/{kaspaAddress}/full-transactions-page` address transaction pages.
 - Added `kaspa_node_rpc_tcp_health` for TCP reachability without RPC calls.
 - Added `kaspa_node_info` as a read-only node metadata boundary that shells out to a local probe/facade command.
 - Bundled optional Node probe at `scripts/kaspa-node-probe/node-info.mjs` using `kaspa-wasm` over wRPC WebSocket.
 - Kept wallet/seed/signing/broadcast out of scope.
-- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes with 51 tests.
+- Targeted verification: `python -m pytest tests/tools/test_kaspa_tools.py -q` currently passes with 53 tests.
 - Probe verification: `node --check scripts/kaspa-node-probe/node-info.mjs` and `npm --prefix scripts/kaspa-node-probe audit --audit-level=high` pass.
 - Full `python -m pytest tests/ -o 'addopts=' -q` did not complete within 600s and showed broad unrelated failures before timeout; do not treat that as a clean full-suite pass.
 

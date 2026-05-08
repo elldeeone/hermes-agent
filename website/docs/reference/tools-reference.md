@@ -132,6 +132,8 @@ Backend split:
 | `kasia_indexer_health` | Read-only check of the Kasia indexer `/metrics` endpoint. | — |
 | `kaspa_address_balance` | Read-only balance lookup for a Kaspa address. | — |
 | `kaspa_address_name` | Read-only known-name lookup for a Kaspa address. | — |
+| `kaspa_address_transaction_count` | Read-only transaction-count lookup for a Kaspa address. | — |
+| `kaspa_address_transactions` | Read-only limited transaction page lookup for a Kaspa address using `/addresses/{kaspaAddress}/full-transactions-page`; accepts optional `limit`, `before`, and `after` pagination inputs. | — |
 | `kaspa_address_utxo_count` | Read-only UTXO count lookup for a Kaspa address. | — |
 | `kaspa_block_lookup` | Read-only block lookup by block hash/id using the Kaspa REST `/blocks/{blockId}` endpoint. | — |
 | `kaspa_transaction_lookup` | Read-only transaction lookup by transaction id using the Kaspa REST `/transactions/{transaction_id}` endpoint. | — |

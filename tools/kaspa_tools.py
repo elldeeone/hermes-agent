@@ -505,6 +505,38 @@ def kaspa_address_name(args: dict, **kwargs) -> str:
     return _kaspa_address_tool(args, suffix="name", payload_key="name")
 
 
+def kaspa_address_transaction_count(args: dict, **kwargs) -> str:
+    """Fetch the read-only transaction count payload for a Kaspa address."""
+    return _kaspa_address_tool(args, suffix="transactions-count", payload_key="transaction_count")
+
+
+def kaspa_address_transactions(args: dict, **kwargs) -> str:
+    """Fetch a read-only limited transaction page for a Kaspa address."""
+    base_url = args.get("url") or os.getenv("KASPA_API_URL") or DEFAULT_KASPA_API_URL
+    try:
+        address = quote(_required_string(args, "address"), safe="")
+        query: dict[str, Any] = {}
+        limit = _optional_non_negative_int(args, "limit", max_value=500)
+        before = _optional_non_negative_int(args, "before")
+        after = _optional_non_negative_int(args, "after")
+        if limit is not None:
+            query["limit"] = max(1, limit)
+        if before is not None:
+            query["before"] = before
+        if after is not None:
+            query["after"] = after
+        result = _get_json(
+            base_url,
+            f"/addresses/{address}/full-transactions-page",
+            args.get("timeout_seconds"),
+            query=query,
+        )
+    except Exception as exc:
+        return _error_from_exception(exc)
+
+    return _successful_json_result(result, "transactions")
+
+
 def kns_search_assets(args: dict, **kwargs) -> str:
     """Search read-only KNS assets/domains with optional filters."""
     try:
@@ -641,6 +673,19 @@ _LIMIT_SCHEMA = {
 _BLOCK_TIME_SCHEMA = {
     "type": "integer",
     "description": "Optional minimum block_time cursor/filter value.",
+    "minimum": 0,
+}
+
+_ADDRESS_TX_LIMIT_SCHEMA = {
+    "type": "integer",
+    "description": "Optional max address transactions to return. Clamped to the 1-500 range.",
+    "minimum": 1,
+    "maximum": 500,
+}
+
+_EPOCH_MILLIS_CURSOR_SCHEMA = {
+    "type": "integer",
+    "description": "Optional epoch-millis pagination cursor.",
     "minimum": 0,
 }
 
@@ -953,6 +998,36 @@ _register_kaspa_address_tool(
     name="kaspa_address_name",
     handler=kaspa_address_name,
     description="Read-only known-name lookup for a Kaspa address.",
+)
+
+_register_kaspa_address_tool(
+    name="kaspa_address_transaction_count",
+    handler=kaspa_address_transaction_count,
+    description="Read-only transaction count lookup for a Kaspa address.",
+)
+
+registry.register(
+    name="kaspa_address_transactions",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_address_transactions",
+        "description": "Read-only limited transaction page lookup for a Kaspa address.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": _URL_SCHEMA,
+                "address": _KASPA_ADDRESS_SCHEMA,
+                "limit": _ADDRESS_TX_LIMIT_SCHEMA,
+                "before": _EPOCH_MILLIS_CURSOR_SCHEMA,
+                "after": _EPOCH_MILLIS_CURSOR_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "required": ["address"],
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_address_transactions,
+    description="Read-only Kaspa address transaction page lookup",
 )
 
 _register_kaspa_address_tool(

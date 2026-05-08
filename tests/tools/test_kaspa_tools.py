@@ -72,6 +72,8 @@ def test_toolset_resolves_kaspa_tools():
         "kasia_indexer_self_stash_by_owner",
         "kaspa_address_balance",
         "kaspa_address_name",
+        "kaspa_address_transaction_count",
+        "kaspa_address_transactions",
         "kaspa_address_utxo_count",
         "kaspa_api_health",
         "kaspa_block_lookup",
@@ -98,6 +100,8 @@ def test_tools_are_not_in_core_tools():
     assert "kasia_indexer_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_balance" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_name" not in _HERMES_CORE_TOOLS
+    assert "kaspa_address_transaction_count" not in _HERMES_CORE_TOOLS
+    assert "kaspa_address_transactions" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_utxo_count" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_rpc_tcp_health" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_info" not in _HERMES_CORE_TOOLS
@@ -726,6 +730,51 @@ def test_kaspa_address_name_returns_name_payload(monkeypatch):
 
     assert result["ok"] is True
     assert result["name"] == {"name": "Example"}
+
+
+def test_kaspa_address_transaction_count_fetches_count(monkeypatch):
+    def fake_urlopen(req, timeout):
+        assert req.full_url == "https://api.example/addresses/kaspa%3Aqabc/transactions-count"
+        return FakeResponse(200, b'{"transactionsCount":9}')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_address_transaction_count({
+        "url": "https://api.example",
+        "address": "kaspa:qabc",
+    }))
+
+    assert result["ok"] is True
+    assert result["transaction_count"] == {"transactionsCount": 9}
+
+
+def test_kaspa_address_transactions_fetches_limited_page(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        return FakeResponse(200, b'[{"transaction_id":"tx1"}]')
+
+    monkeypatch.setattr(kaspa_tools.request, "urlopen", fake_urlopen)
+
+    result = _json(kaspa_tools.kaspa_address_transactions({
+        "url": "https://api.example",
+        "address": "kaspa:qabc",
+        "limit": 999,
+        "before": 123456,
+        "after": 42,
+        "timeout_seconds": 7,
+    }))
+
+    assert result == {
+        "ok": True,
+        "url": "https://api.example",
+        "endpoint": "https://api.example/addresses/kaspa%3Aqabc/full-transactions-page?limit=500&before=123456&after=42",
+        "status_code": 200,
+        "transactions": [{"transaction_id": "tx1"}],
+    }
+    assert seen == {"url": result["endpoint"], "timeout": 7}
 
 
 def test_kaspa_address_tools_reject_missing_address():
