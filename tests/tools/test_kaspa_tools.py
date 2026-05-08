@@ -1,5 +1,6 @@
 import json
 import socket
+import subprocess
 from urllib import error
 
 import pytest
@@ -48,6 +49,17 @@ def test_registry_entries_and_schemas_exist():
     assert kasia_entry.schema["parameters"]["properties"]["url"]["type"] == "string"
     assert "timeout_seconds" in kasia_entry.schema["parameters"]["properties"]
 
+    node_info_entry = registry.get_entry("kaspa_node_info")
+    assert node_info_entry is not None
+    assert node_info_entry.toolset == "kaspa"
+    node_info_properties = node_info_entry.schema["parameters"]["properties"]
+    assert node_info_properties["host"]["type"] == "string"
+    assert node_info_properties["port"]["type"] == "integer"
+    assert node_info_properties["url"]["type"] == "string"
+    assert node_info_properties["network"]["type"] == "string"
+    assert node_info_properties["probe_command"]["type"] == "string"
+    assert "timeout_seconds" in node_info_properties
+
 
 def test_toolset_resolves_kaspa_tools():
     assert resolve_toolset("kaspa") == [
@@ -62,6 +74,7 @@ def test_toolset_resolves_kaspa_tools():
         "kaspa_address_name",
         "kaspa_address_utxo_count",
         "kaspa_api_health",
+        "kaspa_node_info",
         "kaspa_node_rpc_tcp_health",
         "kns_domain_owner",
         "kns_primary_name",
@@ -76,9 +89,88 @@ def test_tools_are_not_in_core_tools():
     assert "kaspa_address_name" not in _HERMES_CORE_TOOLS
     assert "kaspa_address_utxo_count" not in _HERMES_CORE_TOOLS
     assert "kaspa_node_rpc_tcp_health" not in _HERMES_CORE_TOOLS
+    assert "kaspa_node_info" not in _HERMES_CORE_TOOLS
     assert "kns_search_assets" not in _HERMES_CORE_TOOLS
     assert "kns_domain_owner" not in _HERMES_CORE_TOOLS
     assert "kns_primary_name" not in _HERMES_CORE_TOOLS
+
+
+def test_node_info_invokes_readonly_probe_and_returns_normalized_payload(monkeypatch):
+    seen = {}
+
+    def fake_run(command, *, input, text, capture_output, timeout, cwd):
+        seen["command"] = command
+        seen["input"] = json.loads(input)
+        seen["text"] = text
+        seen["capture_output"] = capture_output
+        seen["timeout"] = timeout
+        seen["cwd"] = str(cwd)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({
+                "network": "mainnet",
+                "is_synced": True,
+                "server_version": "rusty-kaspa-1.1.0",
+                "virtual_daa_score": 123456,
+                "selected_tip_hash": "abc",
+            }),
+            stderr="",
+        )
+
+    monkeypatch.delenv("KASPA_NODE_INFO_PROBE_COMMAND", raising=False)
+    monkeypatch.setattr(kaspa_tools.subprocess, "run", fake_run)
+
+    result = _json(kaspa_tools.kaspa_node_info({
+        "host": "10.0.3.20",
+        "port": 16110,
+        "network": "mainnet",
+        "timeout_seconds": 3,
+        "probe_command": "node ./scripts/kaspa-node-probe/node-info.mjs",
+    }))
+
+    assert result == {
+        "ok": True,
+        "host": "10.0.3.20",
+        "port": 16110,
+        "network": "mainnet",
+        "timeout_seconds": 3,
+        "endpoint": "ws://10.0.3.20:16110",
+        "probe": "subprocess",
+        "node_info": {
+            "network": "mainnet",
+            "is_synced": True,
+            "server_version": "rusty-kaspa-1.1.0",
+            "virtual_daa_score": 123456,
+            "selected_tip_hash": "abc",
+        },
+    }
+    assert seen["command"] == ["node", "./scripts/kaspa-node-probe/node-info.mjs"]
+    assert seen["input"] == {
+        "host": "10.0.3.20",
+        "port": 16110,
+        "network": "mainnet",
+        "timeout_seconds": 3,
+        "url": "ws://10.0.3.20:16110",
+    }
+    assert seen["text"] is True
+    assert seen["capture_output"] is True
+    assert seen["timeout"] == 5
+
+
+def test_node_info_reports_probe_failures(monkeypatch):
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 2, stdout="", stderr="connection refused")
+
+    monkeypatch.setattr(kaspa_tools.subprocess, "run", fake_run)
+
+    result = _json(kaspa_tools.kaspa_node_info({"probe_command": "node probe.mjs"}))
+
+    assert result["ok"] is False
+    assert "probe exited with status 2" in result["error"]
+    assert result["stderr"] == "connection refused"
+    assert result["host"] == "127.0.0.1"
+    assert result["port"] == 16110
 
 
 def test_node_rpc_tcp_health_uses_default_grpc_host_port(monkeypatch):

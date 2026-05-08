@@ -236,6 +236,7 @@ TOOLSETS = {
         "tools": [
             "kaspa_api_health",
             "kaspa_node_rpc_tcp_health",
+            "kaspa_node_info",
             "kasia_indexer_health",
             "kasia_indexer_handshakes_by_sender",
             "kasia_indexer_handshakes_by_receiver",

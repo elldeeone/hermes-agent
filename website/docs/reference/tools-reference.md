@@ -111,19 +111,20 @@ Scoped to the Feishu document-comment handler. Drives comment read/write operati
 
 ## `kaspa` toolset
 
-Read-only Kaspa, KNS, and Kasia indexer lookups. These tools intentionally do not sign, broadcast, mutate wallet state, or talk directly to a raw `kaspad` RPC socket. Use them for discovery and status checks; future write/broadcast capabilities should live in a separate tool or explicitly gated flow.
+Read-only Kaspa, KNS, and Kasia indexer lookups. These tools intentionally do not sign, broadcast, mutate wallet state, or require wallet seed material. Use them for discovery and status checks; future write/broadcast capabilities should live in a separate tool or explicitly gated flow.
 
 Backend split:
 
 - **Kaspa REST reads** default to `https://api.kaspa.org` and can be overridden with `KASPA_API_URL` or per-call `url`.
 - **Kasia indexer reads** default to `https://indexer.kasia.fyi` and can be overridden with `KASIA_INDEXER_URL` or per-call `url`.
 - **KNS reads** default to `https://api.knsdomains.org/mainnet` and can be overridden with `KNS_API_URL` or per-call `url`.
-- **Private nodes** are expected to be used for future node/RPC operations such as transaction construction, validation, or broadcast, not for explorer-style historical address queries unless a REST/indexer facade is added. This phase includes only `kaspa_node_rpc_tcp_health`, a TCP reachability check that does not issue an RPC request.
+- **Private node reads** currently include `kaspa_node_rpc_tcp_health`, a TCP reachability check that does not issue an RPC request, and `kaspa_node_info`, which shells out to a local read-only probe/facade command and returns normalized node metadata. The bundled probe uses `kaspa-wasm` over a wRPC WebSocket endpoint after running `npm install` in `scripts/kaspa-node-probe`; gRPC-only nodes can provide an alternate facade via `KASPA_NODE_INFO_PROBE_COMMAND`.
 
 | Tool | Description | Requires environment |
 |------|-------------|----------------------|
 | `kaspa_api_health` | Read-only check of the Kaspa REST `/info/health` endpoint. | — |
 | `kaspa_node_rpc_tcp_health` | Read-only TCP reachability check for a kaspad RPC endpoint. Defaults to `KASPA_NODE_RPC_HOST`/`KASPA_NODE_RPC_PORT` or `127.0.0.1:16110`; does not issue an RPC request. | — |
+| `kaspa_node_info` | Read-only kaspad node metadata via a local probe/facade command. Defaults to `KASPA_NODE_INFO_PROBE_COMMAND` or the bundled `scripts/kaspa-node-probe/node-info.mjs`; accepts `KASPA_NODE_RPC_URL`, `KASPA_NODE_NETWORK`, host, port, and timeout overrides. | — |
 | `kasia_indexer_health` | Read-only check of the Kasia indexer `/metrics` endpoint. | — |
 | `kaspa_address_balance` | Read-only balance lookup for a Kaspa address. | — |
 | `kaspa_address_name` | Read-only known-name lookup for a Kaspa address. | — |

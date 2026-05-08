@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import socket
+import subprocess
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
@@ -18,6 +21,9 @@ DEFAULT_KASIA_INDEXER_URL = "https://indexer.kasia.fyi"
 DEFAULT_KNS_API_URL = "https://api.knsdomains.org/mainnet"
 DEFAULT_KASPA_NODE_RPC_HOST = "127.0.0.1"
 DEFAULT_KASPA_NODE_RPC_PORT = 16110
+DEFAULT_KASPA_NODE_NETWORK = "mainnet"
+DEFAULT_KASPA_NODE_INFO_PROBE_COMMAND = "node scripts/kaspa-node-probe/node-info.mjs"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _normalize_base_url(url: str) -> str:
@@ -314,6 +320,102 @@ def kaspa_node_rpc_tcp_health(args: dict, **kwargs) -> str:
     )
 
 
+def kaspa_node_info(args: dict, **kwargs) -> str:
+    """Fetch read-only kaspad node info through an isolated local probe command."""
+    try:
+        host = _optional_string(args, "host") or os.getenv("KASPA_NODE_RPC_HOST") or DEFAULT_KASPA_NODE_RPC_HOST
+        port = _coerce_tcp_port(args.get("port") or os.getenv("KASPA_NODE_RPC_PORT"))
+        endpoint = _optional_string(args, "url") or os.getenv("KASPA_NODE_RPC_URL") or f"ws://{host}:{port}"
+        network = _optional_string(args, "network") or os.getenv("KASPA_NODE_NETWORK") or DEFAULT_KASPA_NODE_NETWORK
+        timeout = _coerce_timeout_seconds(args.get("timeout_seconds"))
+        command_text = (
+            _optional_string(args, "probe_command")
+            or os.getenv("KASPA_NODE_INFO_PROBE_COMMAND")
+            or DEFAULT_KASPA_NODE_INFO_PROBE_COMMAND
+        )
+        command = shlex.split(command_text)
+        if not command:
+            raise ValueError("probe_command is required")
+        probe_input = {
+            "host": host,
+            "port": port,
+            "network": network,
+            "timeout_seconds": timeout,
+            "url": endpoint,
+        }
+        completed = subprocess.run(
+            command,
+            input=json.dumps(probe_input),
+            text=True,
+            capture_output=True,
+            timeout=timeout + 2,
+            cwd=PROJECT_ROOT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return tool_error(
+            f"Kaspa node info probe timed out after {timeout + 2} seconds",
+            ok=False,
+            host=locals().get("host", DEFAULT_KASPA_NODE_RPC_HOST),
+            port=locals().get("port", DEFAULT_KASPA_NODE_RPC_PORT),
+            endpoint=locals().get("endpoint"),
+            network=locals().get("network", DEFAULT_KASPA_NODE_NETWORK),
+            timeout_seconds=locals().get("timeout", 10),
+            stdout=(exc.stdout or "")[:2000] if isinstance(exc.stdout, str) else None,
+            stderr=(exc.stderr or "")[:2000] if isinstance(exc.stderr, str) else None,
+        )
+    except Exception as exc:
+        return tool_error(
+            str(exc),
+            ok=False,
+            host=locals().get("host", DEFAULT_KASPA_NODE_RPC_HOST),
+            port=locals().get("port", DEFAULT_KASPA_NODE_RPC_PORT),
+            endpoint=locals().get("endpoint"),
+            network=locals().get("network", DEFAULT_KASPA_NODE_NETWORK),
+            timeout_seconds=locals().get("timeout", 10),
+        )
+
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    if completed.returncode != 0:
+        return tool_error(
+            f"Kaspa node info probe exited with status {completed.returncode}",
+            ok=False,
+            host=host,
+            port=port,
+            endpoint=endpoint,
+            network=network,
+            timeout_seconds=timeout,
+            stdout=stdout[:2000],
+            stderr=stderr[:2000],
+        )
+    try:
+        node_info = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return tool_error(
+            f"Kaspa node info probe returned invalid JSON: {exc}",
+            ok=False,
+            host=host,
+            port=port,
+            endpoint=endpoint,
+            network=network,
+            timeout_seconds=timeout,
+            stdout=stdout[:2000],
+            stderr=stderr[:2000],
+        )
+
+    return tool_result(
+        ok=True,
+        host=host,
+        port=port,
+        endpoint=endpoint,
+        network=network,
+        timeout_seconds=timeout,
+        probe="subprocess",
+        node_info=node_info,
+    )
+
+
+
 def kaspa_address_balance(args: dict, **kwargs) -> str:
     """Fetch the read-only balance payload for a Kaspa address."""
     return _kaspa_address_tool(args, suffix="balance", payload_key="balance")
@@ -444,6 +546,16 @@ _PORT_SCHEMA = {
     "description": "Optional kaspad RPC TCP port. Defaults to KASPA_NODE_RPC_PORT, then 16110.",
     "minimum": 1,
     "maximum": 65535,
+}
+
+_NETWORK_SCHEMA = {
+    "type": "string",
+    "description": "Optional Kaspa network id for node probes. Defaults to KASPA_NODE_NETWORK, then mainnet.",
+}
+
+_PROBE_COMMAND_SCHEMA = {
+    "type": "string",
+    "description": "Optional local read-only probe command. Defaults to KASPA_NODE_INFO_PROBE_COMMAND, then the bundled Node probe.",
 }
 
 _LIMIT_SCHEMA = {
@@ -643,6 +755,32 @@ registry.register(
     },
     handler=kaspa_node_rpc_tcp_health,
     description="Read-only kaspad RPC TCP reachability check",
+)
+
+registry.register(
+    name="kaspa_node_info",
+    toolset="kaspa",
+    schema={
+        "name": "kaspa_node_info",
+        "description": "Read-only kaspad node info via an isolated local probe/facade command. Does not require a wallet or signing key.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "host": _HOST_SCHEMA,
+                "port": _PORT_SCHEMA,
+                "url": {
+                    "type": "string",
+                    "description": "Optional concrete RPC endpoint URL for the probe, for example ws://127.0.0.1:17110. Defaults to KASPA_NODE_RPC_URL, then ws://<host>:<port>.",
+                },
+                "network": _NETWORK_SCHEMA,
+                "probe_command": _PROBE_COMMAND_SCHEMA,
+                "timeout_seconds": _TIMEOUT_SCHEMA,
+            },
+            "additionalProperties": False,
+        },
+    },
+    handler=kaspa_node_info,
+    description="Read-only kaspad node info probe",
 )
 
 _register_kaspa_address_tool(

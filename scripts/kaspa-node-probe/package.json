@@ -1,0 +1,14 @@
+{
+  "name": "hermes-kaspa-node-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional read-only Kaspa node probe used by Hermes kaspa_node_info.",
+  "dependencies": {
+    "isomorphic-ws": "^5.0.0",
+    "kaspa-wasm": "0.13.0"
+  },
+  "scripts": {
+    "probe": "node node-info.mjs"
+  }
+}
