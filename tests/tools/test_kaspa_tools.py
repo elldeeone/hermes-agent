@@ -95,6 +95,28 @@ def test_tools_are_not_in_core_tools():
     assert "kns_primary_name" not in _HERMES_CORE_TOOLS
 
 
+def test_node_info_defaults_to_wrpc_websocket_port(monkeypatch):
+    seen = {}
+
+    def fake_run(command, *, input, text, capture_output, timeout, cwd):
+        seen["input"] = json.loads(input)
+        return subprocess.CompletedProcess(command, 0, stdout='{"network":"mainnet"}', stderr="")
+
+    monkeypatch.delenv("KASPA_NODE_RPC_HOST", raising=False)
+    monkeypatch.delenv("KASPA_NODE_RPC_PORT", raising=False)
+    monkeypatch.delenv("KASPA_NODE_WRPC_PORT", raising=False)
+    monkeypatch.delenv("KASPA_NODE_RPC_URL", raising=False)
+    monkeypatch.setattr(kaspa_tools.subprocess, "run", fake_run)
+
+    result = _json(kaspa_tools.kaspa_node_info({"probe_command": "node probe.mjs"}))
+
+    assert result["ok"] is True
+    assert result["host"] == "127.0.0.1"
+    assert result["port"] == 17110
+    assert result["endpoint"] == "ws://127.0.0.1:17110"
+    assert seen["input"]["url"] == "ws://127.0.0.1:17110"
+
+
 def test_node_info_invokes_readonly_probe_and_returns_normalized_payload(monkeypatch):
     seen = {}
 
@@ -170,7 +192,7 @@ def test_node_info_reports_probe_failures(monkeypatch):
     assert "probe exited with status 2" in result["error"]
     assert result["stderr"] == "connection refused"
     assert result["host"] == "127.0.0.1"
-    assert result["port"] == 16110
+    assert result["port"] == 17110
 
 
 def test_node_rpc_tcp_health_uses_default_grpc_host_port(monkeypatch):

@@ -124,7 +124,7 @@ Backend split:
 |------|-------------|----------------------|
 | `kaspa_api_health` | Read-only check of the Kaspa REST `/info/health` endpoint. | — |
 | `kaspa_node_rpc_tcp_health` | Read-only TCP reachability check for a kaspad RPC endpoint. Defaults to `KASPA_NODE_RPC_HOST`/`KASPA_NODE_RPC_PORT` or `127.0.0.1:16110`; does not issue an RPC request. | — |
-| `kaspa_node_info` | Read-only kaspad node metadata via a local probe/facade command. Defaults to `KASPA_NODE_INFO_PROBE_COMMAND` or the bundled `scripts/kaspa-node-probe/node-info.mjs`; accepts `KASPA_NODE_RPC_URL`, `KASPA_NODE_NETWORK`, host, port, and timeout overrides. | — |
+| `kaspa_node_info` | Read-only kaspad node metadata via a local probe/facade command. Defaults to `KASPA_NODE_INFO_PROBE_COMMAND` or the bundled `scripts/kaspa-node-probe/node-info.mjs`; accepts `KASPA_NODE_RPC_URL`, `KASPA_NODE_NETWORK`, host, port, and timeout overrides. The bundled probe expects wRPC WebSocket, defaulting to port `17110`; gRPC-only port `16110` needs an alternate facade command. | — |
 | `kasia_indexer_health` | Read-only check of the Kasia indexer `/metrics` endpoint. | — |
 | `kaspa_address_balance` | Read-only balance lookup for a Kaspa address. | — |
 | `kaspa_address_name` | Read-only known-name lookup for a Kaspa address. | — |

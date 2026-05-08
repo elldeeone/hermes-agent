@@ -21,6 +21,7 @@ DEFAULT_KASIA_INDEXER_URL = "https://indexer.kasia.fyi"
 DEFAULT_KNS_API_URL = "https://api.knsdomains.org/mainnet"
 DEFAULT_KASPA_NODE_RPC_HOST = "127.0.0.1"
 DEFAULT_KASPA_NODE_RPC_PORT = 16110
+DEFAULT_KASPA_NODE_WRPC_PORT = 17110
 DEFAULT_KASPA_NODE_NETWORK = "mainnet"
 DEFAULT_KASPA_NODE_INFO_PROBE_COMMAND = "node scripts/kaspa-node-probe/node-info.mjs"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -324,7 +325,12 @@ def kaspa_node_info(args: dict, **kwargs) -> str:
     """Fetch read-only kaspad node info through an isolated local probe command."""
     try:
         host = _optional_string(args, "host") or os.getenv("KASPA_NODE_RPC_HOST") or DEFAULT_KASPA_NODE_RPC_HOST
-        port = _coerce_tcp_port(args.get("port") or os.getenv("KASPA_NODE_RPC_PORT"))
+        port = _coerce_tcp_port(
+            args.get("port")
+            or os.getenv("KASPA_NODE_WRPC_PORT")
+            or os.getenv("KASPA_NODE_RPC_PORT")
+            or DEFAULT_KASPA_NODE_WRPC_PORT
+        )
         endpoint = _optional_string(args, "url") or os.getenv("KASPA_NODE_RPC_URL") or f"ws://{host}:{port}"
         network = _optional_string(args, "network") or os.getenv("KASPA_NODE_NETWORK") or DEFAULT_KASPA_NODE_NETWORK
         timeout = _coerce_timeout_seconds(args.get("timeout_seconds"))
@@ -356,7 +362,7 @@ def kaspa_node_info(args: dict, **kwargs) -> str:
             f"Kaspa node info probe timed out after {timeout + 2} seconds",
             ok=False,
             host=locals().get("host", DEFAULT_KASPA_NODE_RPC_HOST),
-            port=locals().get("port", DEFAULT_KASPA_NODE_RPC_PORT),
+            port=locals().get("port", DEFAULT_KASPA_NODE_WRPC_PORT),
             endpoint=locals().get("endpoint"),
             network=locals().get("network", DEFAULT_KASPA_NODE_NETWORK),
             timeout_seconds=locals().get("timeout", 10),
@@ -368,7 +374,7 @@ def kaspa_node_info(args: dict, **kwargs) -> str:
             str(exc),
             ok=False,
             host=locals().get("host", DEFAULT_KASPA_NODE_RPC_HOST),
-            port=locals().get("port", DEFAULT_KASPA_NODE_RPC_PORT),
+            port=locals().get("port", DEFAULT_KASPA_NODE_WRPC_PORT),
             endpoint=locals().get("endpoint"),
             network=locals().get("network", DEFAULT_KASPA_NODE_NETWORK),
             timeout_seconds=locals().get("timeout", 10),
@@ -555,7 +561,7 @@ _NETWORK_SCHEMA = {
 
 _PROBE_COMMAND_SCHEMA = {
     "type": "string",
-    "description": "Optional local read-only probe command. Defaults to KASPA_NODE_INFO_PROBE_COMMAND, then the bundled Node probe.",
+    "description": "Optional local read-only probe command. Defaults to KASPA_NODE_INFO_PROBE_COMMAND, then the bundled Node probe. The bundled probe expects a wRPC WebSocket endpoint, default port 17110.",
 }
 
 _LIMIT_SCHEMA = {
@@ -770,7 +776,7 @@ registry.register(
                 "port": _PORT_SCHEMA,
                 "url": {
                     "type": "string",
-                    "description": "Optional concrete RPC endpoint URL for the probe, for example ws://127.0.0.1:17110. Defaults to KASPA_NODE_RPC_URL, then ws://<host>:<port>.",
+                    "description": "Optional concrete RPC endpoint URL for the probe, for example ws://127.0.0.1:17110. Defaults to KASPA_NODE_RPC_URL, then ws://<host>:<port>. The bundled probe expects wRPC WebSocket, not the gRPC-only 16110 socket.",
                 },
                 "network": _NETWORK_SCHEMA,
                 "probe_command": _PROBE_COMMAND_SCHEMA,
